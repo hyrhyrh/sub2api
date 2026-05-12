@@ -4,6 +4,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/handler/dto"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
 	"github.com/Wei-Shaw/sub2api/internal/service"
+	"github.com/Wei-Shaw/sub2api/internal/web"
 
 	"github.com/gin-gonic/gin"
 )
@@ -31,6 +32,17 @@ func (h *SettingHandler) GetPublicSettings(c *gin.Context) {
 		return
 	}
 
+	siteName := settings.SiteName
+	siteSubtitle := settings.SiteSubtitle
+	if override, ok := web.GetDomainOverride(c.Request.Host); ok {
+		if override.Name != "" {
+			siteName = override.Name
+		}
+		if override.Subtitle != "" {
+			siteSubtitle = override.Subtitle
+		}
+	}
+
 	response.Success(c, dto.PublicSettings{
 		RegistrationEnabled:              settings.RegistrationEnabled,
 		EmailVerifyEnabled:               settings.EmailVerifyEnabled,
@@ -47,9 +59,9 @@ func (h *SettingHandler) GetPublicSettings(c *gin.Context) {
 		LoginAgreementDocuments:          publicLoginAgreementDocumentsToDTO(settings.LoginAgreementDocuments),
 		TurnstileEnabled:                 settings.TurnstileEnabled,
 		TurnstileSiteKey:                 settings.TurnstileSiteKey,
-		SiteName:                         settings.SiteName,
+		SiteName:                         siteName,
 		SiteLogo:                         settings.SiteLogo,
-		SiteSubtitle:                     settings.SiteSubtitle,
+		SiteSubtitle:                     siteSubtitle,
 		APIBaseURL:                       settings.APIBaseURL,
 		ContactInfo:                      settings.ContactInfo,
 		DocURL:                           settings.DocURL,
