@@ -296,17 +296,25 @@ const chartOptions = {
       </div>
 
       <!-- 说明 -->
-      <div class="mt-4 rounded-2xl border border-blue-200 bg-blue-50/40 p-4 text-xs text-gray-600 dark:border-blue-900/50 dark:bg-blue-900/10 dark:text-gray-300">
-        <div class="mb-2 font-semibold text-gray-700 dark:text-gray-200">💡 评判标准</div>
+      <div class="mt-4 rounded-2xl border border-blue-200 bg-blue-50/40 p-4 text-sm text-gray-600 dark:border-blue-900/50 dark:bg-blue-900/10 dark:text-gray-300">
+        <div class="mb-2 text-base font-semibold text-gray-700 dark:text-gray-200">💡 RTT 评判标准</div>
         <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <div><span class="rounded bg-emerald-100 px-1.5 py-0.5 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">优</span> &lt; 80ms — 同城/同区域</div>
           <div><span class="rounded bg-amber-100 px-1.5 py-0.5 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">良</span> 80~200ms — 跨区/正常出海</div>
           <div><span class="rounded bg-red-100 px-1.5 py-0.5 text-red-700 dark:bg-red-900/40 dark:text-red-300">中</span> 200~500ms — 弱网/绕路</div>
           <div><span class="rounded bg-red-200 px-1.5 py-0.5 text-red-800 dark:bg-red-900/60 dark:text-red-200">差</span> &gt; 500ms — 严重抖动,建议换网络</div>
         </div>
+        <div class="mt-4 mb-2 text-base font-semibold text-gray-700 dark:text-gray-200">📉 丢包率评判标准</div>
+        <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div><span class="rounded bg-emerald-100 px-1.5 py-0.5 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">优</span> 0% — 链路稳定</div>
+          <div><span class="rounded bg-amber-100 px-1.5 py-0.5 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">良</span> 0~1% — 偶发丢包,可接受</div>
+          <div><span class="rounded bg-red-100 px-1.5 py-0.5 text-red-700 dark:bg-red-900/40 dark:text-red-300">中</span> 1~5% — 影响交互体验</div>
+          <div><span class="rounded bg-red-200 px-1.5 py-0.5 text-red-800 dark:bg-red-900/60 dark:text-red-200">差</span> &gt; 5% — 严重影响,建议换网络</div>
+        </div>
         <div class="mt-3 text-gray-500">
           RTT(往返时延)= HTTP 请求发起 → 收到服务器响应的耗时。包含 TCP/TLS(已建立连接后忽略) + HTTP 头部往返。
           抖动反映网络稳定性,&gt; 50ms 通常说明链路不稳。
+          丢包率 = 失败请求数 / 总请求数,反映链路可达性,流式 LLM 响应对丢包尤其敏感。
         </div>
       </div>
     </div>
