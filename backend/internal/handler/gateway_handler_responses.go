@@ -226,7 +226,13 @@ func (h *GatewayHandler) Responses(c *gin.Context) {
 		if channelMapping.Mapped {
 			forwardBody = h.gatewayService.ReplaceModelInBody(body, channelMapping.MappedModel)
 		}
+		latencyTracker := middleware2.GetLatencyTracker(c)
+		latencyTracker.MarkUpstreamSent()
 		result, err := h.gatewayService.ForwardAsResponses(c.Request.Context(), c, account, forwardBody, parsedReq)
+		latencyTracker.MarkUpstreamCompleted()
+		if result != nil && result.FirstTokenMs != nil {
+			latencyTracker.SetUpstreamTTFBMs(*result.FirstTokenMs)
+		}
 
 		if accountReleaseFunc != nil {
 			accountReleaseFunc()
@@ -266,6 +272,7 @@ func (h *GatewayHandler) Responses(c *gin.Context) {
 		inboundEndpoint := GetInboundEndpoint(c)
 		upstreamEndpoint := GetUpstreamEndpoint(c, account.Platform)
 
+		latencyFields := CollectLatencyUsageFields(c, h.geoIPService, clientIP)
 		h.submitUsageRecordTask(func(ctx context.Context) {
 			if err := h.gatewayService.RecordUsage(ctx, &service.RecordUsageInput{
 				Result:             result,
@@ -280,6 +287,7 @@ func (h *GatewayHandler) Responses(c *gin.Context) {
 				RequestPayloadHash: requestPayloadHash,
 				APIKeyService:      h.apiKeyService,
 				ChannelUsageFields: channelMapping.ToUsageFields(reqModel, result.UpstreamModel),
+				LatencyUsageFields: latencyFields,
 			}); err != nil {
 				reqLog.Error("gateway.responses.record_usage_failed",
 					zap.Int64("account_id", account.ID),

@@ -65,6 +65,9 @@ func RegisterAdminRoutes(
 		// 运维监控（Ops）
 		registerOpsRoutes(admin, h)
 
+		// 网络延迟诊断
+		registerLatencyRoutes(admin, h)
+
 		// 系统管理
 		registerSystemRoutes(admin, h)
 
@@ -121,6 +124,18 @@ func registerAdminAPIKeyRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 	apiKeys := admin.Group("/api-keys")
 	{
 		apiKeys.PUT("/:id", h.Admin.APIKey.UpdateGroup)
+	}
+}
+
+// registerLatencyRoutes 注册 /admin/latency/* 路由，由 plan/latency-tracking-final.md 驱动。
+func registerLatencyRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
+	latency := admin.Group("/latency")
+	{
+		latency.GET("/overview", h.Admin.Latency.Overview)
+		latency.GET("/by-region", h.Admin.Latency.ByRegion)
+		latency.GET("/by-user", h.Admin.Latency.ByUser)
+		latency.GET("/trend", h.Admin.Latency.Trend)
+		latency.GET("/slow-requests", h.Admin.Latency.SlowRequests)
 	}
 }
 

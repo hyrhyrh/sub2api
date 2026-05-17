@@ -158,6 +158,18 @@ type UsageLog struct {
 	UserAgent    *string
 	IPAddress    *string
 
+	// 5 段网络延迟分解（plan/latency-tracking-final.md），nil 表示未采集到。
+	ServerProcessingMs *int
+	UpstreamTTFBMs     *int
+	UpstreamStreamMs   *int
+	ResponseDeliveryMs *int
+	TotalLatencyMs     *int
+
+	// 入口标识 + 客户端地理定位（nil/空表示未解析）。
+	AccessType    *string
+	ClientCountry *string
+	ClientRegion  *string
+
 	// Cache TTL Override 标记（管理员强制替换了缓存 TTL 计费）
 	CacheTTLOverridden bool
 

@@ -4761,6 +4761,30 @@
         <div class="card">
           <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
             <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
+              公开测速页面
+            </h2>
+            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+              控制 /speedtest 网络 RTT 测试页的访问范围
+            </p>
+          </div>
+          <div class="space-y-5 p-6">
+            <div class="flex items-center justify-between">
+              <div>
+                <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  允许任何人访问
+                </label>
+                <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                  开启后无需登录即可访问 /speedtest;关闭则只有管理员可见(普通用户与未登录访客被重定向)。
+                </p>
+              </div>
+              <Toggle v-model="form.speedtest_public_enabled" />
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
               {{ t('admin.settings.features.riskControl.title') }}
             </h2>
             <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
@@ -6613,6 +6637,8 @@ const form = reactive<SettingsForm>({
   channel_monitor_default_interval_seconds: 60,
   // Available Channels feature switch
   available_channels_enabled: false,
+  // Speedtest public page switch
+  speedtest_public_enabled: false,
   // Affiliate (邀请返利) feature switch
   affiliate_enabled: false,
 });
@@ -7719,6 +7745,8 @@ async function saveSettings() {
         Number(form.channel_monitor_default_interval_seconds) || 60,
       // Available Channels feature switch
       available_channels_enabled: form.available_channels_enabled,
+      // Speedtest public page switch
+      speedtest_public_enabled: form.speedtest_public_enabled,
       // Affiliate (邀请返利) feature switch
       affiliate_enabled: form.affiliate_enabled,
     };

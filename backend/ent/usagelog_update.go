@@ -658,6 +658,201 @@ func (_u *UsageLogUpdate) ClearFirstTokenMs() *UsageLogUpdate {
 	return _u
 }
 
+// SetServerProcessingMs sets the "server_processing_ms" field.
+func (_u *UsageLogUpdate) SetServerProcessingMs(v int) *UsageLogUpdate {
+	_u.mutation.ResetServerProcessingMs()
+	_u.mutation.SetServerProcessingMs(v)
+	return _u
+}
+
+// SetNillableServerProcessingMs sets the "server_processing_ms" field if the given value is not nil.
+func (_u *UsageLogUpdate) SetNillableServerProcessingMs(v *int) *UsageLogUpdate {
+	if v != nil {
+		_u.SetServerProcessingMs(*v)
+	}
+	return _u
+}
+
+// AddServerProcessingMs adds value to the "server_processing_ms" field.
+func (_u *UsageLogUpdate) AddServerProcessingMs(v int) *UsageLogUpdate {
+	_u.mutation.AddServerProcessingMs(v)
+	return _u
+}
+
+// ClearServerProcessingMs clears the value of the "server_processing_ms" field.
+func (_u *UsageLogUpdate) ClearServerProcessingMs() *UsageLogUpdate {
+	_u.mutation.ClearServerProcessingMs()
+	return _u
+}
+
+// SetUpstreamTtfbMs sets the "upstream_ttfb_ms" field.
+func (_u *UsageLogUpdate) SetUpstreamTtfbMs(v int) *UsageLogUpdate {
+	_u.mutation.ResetUpstreamTtfbMs()
+	_u.mutation.SetUpstreamTtfbMs(v)
+	return _u
+}
+
+// SetNillableUpstreamTtfbMs sets the "upstream_ttfb_ms" field if the given value is not nil.
+func (_u *UsageLogUpdate) SetNillableUpstreamTtfbMs(v *int) *UsageLogUpdate {
+	if v != nil {
+		_u.SetUpstreamTtfbMs(*v)
+	}
+	return _u
+}
+
+// AddUpstreamTtfbMs adds value to the "upstream_ttfb_ms" field.
+func (_u *UsageLogUpdate) AddUpstreamTtfbMs(v int) *UsageLogUpdate {
+	_u.mutation.AddUpstreamTtfbMs(v)
+	return _u
+}
+
+// ClearUpstreamTtfbMs clears the value of the "upstream_ttfb_ms" field.
+func (_u *UsageLogUpdate) ClearUpstreamTtfbMs() *UsageLogUpdate {
+	_u.mutation.ClearUpstreamTtfbMs()
+	return _u
+}
+
+// SetUpstreamStreamMs sets the "upstream_stream_ms" field.
+func (_u *UsageLogUpdate) SetUpstreamStreamMs(v int) *UsageLogUpdate {
+	_u.mutation.ResetUpstreamStreamMs()
+	_u.mutation.SetUpstreamStreamMs(v)
+	return _u
+}
+
+// SetNillableUpstreamStreamMs sets the "upstream_stream_ms" field if the given value is not nil.
+func (_u *UsageLogUpdate) SetNillableUpstreamStreamMs(v *int) *UsageLogUpdate {
+	if v != nil {
+		_u.SetUpstreamStreamMs(*v)
+	}
+	return _u
+}
+
+// AddUpstreamStreamMs adds value to the "upstream_stream_ms" field.
+func (_u *UsageLogUpdate) AddUpstreamStreamMs(v int) *UsageLogUpdate {
+	_u.mutation.AddUpstreamStreamMs(v)
+	return _u
+}
+
+// ClearUpstreamStreamMs clears the value of the "upstream_stream_ms" field.
+func (_u *UsageLogUpdate) ClearUpstreamStreamMs() *UsageLogUpdate {
+	_u.mutation.ClearUpstreamStreamMs()
+	return _u
+}
+
+// SetResponseDeliveryMs sets the "response_delivery_ms" field.
+func (_u *UsageLogUpdate) SetResponseDeliveryMs(v int) *UsageLogUpdate {
+	_u.mutation.ResetResponseDeliveryMs()
+	_u.mutation.SetResponseDeliveryMs(v)
+	return _u
+}
+
+// SetNillableResponseDeliveryMs sets the "response_delivery_ms" field if the given value is not nil.
+func (_u *UsageLogUpdate) SetNillableResponseDeliveryMs(v *int) *UsageLogUpdate {
+	if v != nil {
+		_u.SetResponseDeliveryMs(*v)
+	}
+	return _u
+}
+
+// AddResponseDeliveryMs adds value to the "response_delivery_ms" field.
+func (_u *UsageLogUpdate) AddResponseDeliveryMs(v int) *UsageLogUpdate {
+	_u.mutation.AddResponseDeliveryMs(v)
+	return _u
+}
+
+// ClearResponseDeliveryMs clears the value of the "response_delivery_ms" field.
+func (_u *UsageLogUpdate) ClearResponseDeliveryMs() *UsageLogUpdate {
+	_u.mutation.ClearResponseDeliveryMs()
+	return _u
+}
+
+// SetTotalLatencyMs sets the "total_latency_ms" field.
+func (_u *UsageLogUpdate) SetTotalLatencyMs(v int) *UsageLogUpdate {
+	_u.mutation.ResetTotalLatencyMs()
+	_u.mutation.SetTotalLatencyMs(v)
+	return _u
+}
+
+// SetNillableTotalLatencyMs sets the "total_latency_ms" field if the given value is not nil.
+func (_u *UsageLogUpdate) SetNillableTotalLatencyMs(v *int) *UsageLogUpdate {
+	if v != nil {
+		_u.SetTotalLatencyMs(*v)
+	}
+	return _u
+}
+
+// AddTotalLatencyMs adds value to the "total_latency_ms" field.
+func (_u *UsageLogUpdate) AddTotalLatencyMs(v int) *UsageLogUpdate {
+	_u.mutation.AddTotalLatencyMs(v)
+	return _u
+}
+
+// ClearTotalLatencyMs clears the value of the "total_latency_ms" field.
+func (_u *UsageLogUpdate) ClearTotalLatencyMs() *UsageLogUpdate {
+	_u.mutation.ClearTotalLatencyMs()
+	return _u
+}
+
+// SetAccessType sets the "access_type" field.
+func (_u *UsageLogUpdate) SetAccessType(v string) *UsageLogUpdate {
+	_u.mutation.SetAccessType(v)
+	return _u
+}
+
+// SetNillableAccessType sets the "access_type" field if the given value is not nil.
+func (_u *UsageLogUpdate) SetNillableAccessType(v *string) *UsageLogUpdate {
+	if v != nil {
+		_u.SetAccessType(*v)
+	}
+	return _u
+}
+
+// ClearAccessType clears the value of the "access_type" field.
+func (_u *UsageLogUpdate) ClearAccessType() *UsageLogUpdate {
+	_u.mutation.ClearAccessType()
+	return _u
+}
+
+// SetClientCountry sets the "client_country" field.
+func (_u *UsageLogUpdate) SetClientCountry(v string) *UsageLogUpdate {
+	_u.mutation.SetClientCountry(v)
+	return _u
+}
+
+// SetNillableClientCountry sets the "client_country" field if the given value is not nil.
+func (_u *UsageLogUpdate) SetNillableClientCountry(v *string) *UsageLogUpdate {
+	if v != nil {
+		_u.SetClientCountry(*v)
+	}
+	return _u
+}
+
+// ClearClientCountry clears the value of the "client_country" field.
+func (_u *UsageLogUpdate) ClearClientCountry() *UsageLogUpdate {
+	_u.mutation.ClearClientCountry()
+	return _u
+}
+
+// SetClientRegion sets the "client_region" field.
+func (_u *UsageLogUpdate) SetClientRegion(v string) *UsageLogUpdate {
+	_u.mutation.SetClientRegion(v)
+	return _u
+}
+
+// SetNillableClientRegion sets the "client_region" field if the given value is not nil.
+func (_u *UsageLogUpdate) SetNillableClientRegion(v *string) *UsageLogUpdate {
+	if v != nil {
+		_u.SetClientRegion(*v)
+	}
+	return _u
+}
+
+// ClearClientRegion clears the value of the "client_region" field.
+func (_u *UsageLogUpdate) ClearClientRegion() *UsageLogUpdate {
+	_u.mutation.ClearClientRegion()
+	return _u
+}
+
 // SetUserAgent sets the "user_agent" field.
 func (_u *UsageLogUpdate) SetUserAgent(v string) *UsageLogUpdate {
 	_u.mutation.SetUserAgent(v)
@@ -877,6 +1072,21 @@ func (_u *UsageLogUpdate) check() error {
 			return &ValidationError{Name: "billing_mode", err: fmt.Errorf(`ent: validator failed for field "UsageLog.billing_mode": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.AccessType(); ok {
+		if err := usagelog.AccessTypeValidator(v); err != nil {
+			return &ValidationError{Name: "access_type", err: fmt.Errorf(`ent: validator failed for field "UsageLog.access_type": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.ClientCountry(); ok {
+		if err := usagelog.ClientCountryValidator(v); err != nil {
+			return &ValidationError{Name: "client_country", err: fmt.Errorf(`ent: validator failed for field "UsageLog.client_country": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.ClientRegion(); ok {
+		if err := usagelog.ClientRegionValidator(v); err != nil {
+			return &ValidationError{Name: "client_region", err: fmt.Errorf(`ent: validator failed for field "UsageLog.client_region": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.UserAgent(); ok {
 		if err := usagelog.UserAgentValidator(v); err != nil {
 			return &ValidationError{Name: "user_agent", err: fmt.Errorf(`ent: validator failed for field "UsageLog.user_agent": %w`, err)}
@@ -1074,6 +1284,69 @@ func (_u *UsageLogUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if _u.mutation.FirstTokenMsCleared() {
 		_spec.ClearField(usagelog.FieldFirstTokenMs, field.TypeInt)
+	}
+	if value, ok := _u.mutation.ServerProcessingMs(); ok {
+		_spec.SetField(usagelog.FieldServerProcessingMs, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedServerProcessingMs(); ok {
+		_spec.AddField(usagelog.FieldServerProcessingMs, field.TypeInt, value)
+	}
+	if _u.mutation.ServerProcessingMsCleared() {
+		_spec.ClearField(usagelog.FieldServerProcessingMs, field.TypeInt)
+	}
+	if value, ok := _u.mutation.UpstreamTtfbMs(); ok {
+		_spec.SetField(usagelog.FieldUpstreamTtfbMs, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedUpstreamTtfbMs(); ok {
+		_spec.AddField(usagelog.FieldUpstreamTtfbMs, field.TypeInt, value)
+	}
+	if _u.mutation.UpstreamTtfbMsCleared() {
+		_spec.ClearField(usagelog.FieldUpstreamTtfbMs, field.TypeInt)
+	}
+	if value, ok := _u.mutation.UpstreamStreamMs(); ok {
+		_spec.SetField(usagelog.FieldUpstreamStreamMs, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedUpstreamStreamMs(); ok {
+		_spec.AddField(usagelog.FieldUpstreamStreamMs, field.TypeInt, value)
+	}
+	if _u.mutation.UpstreamStreamMsCleared() {
+		_spec.ClearField(usagelog.FieldUpstreamStreamMs, field.TypeInt)
+	}
+	if value, ok := _u.mutation.ResponseDeliveryMs(); ok {
+		_spec.SetField(usagelog.FieldResponseDeliveryMs, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedResponseDeliveryMs(); ok {
+		_spec.AddField(usagelog.FieldResponseDeliveryMs, field.TypeInt, value)
+	}
+	if _u.mutation.ResponseDeliveryMsCleared() {
+		_spec.ClearField(usagelog.FieldResponseDeliveryMs, field.TypeInt)
+	}
+	if value, ok := _u.mutation.TotalLatencyMs(); ok {
+		_spec.SetField(usagelog.FieldTotalLatencyMs, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedTotalLatencyMs(); ok {
+		_spec.AddField(usagelog.FieldTotalLatencyMs, field.TypeInt, value)
+	}
+	if _u.mutation.TotalLatencyMsCleared() {
+		_spec.ClearField(usagelog.FieldTotalLatencyMs, field.TypeInt)
+	}
+	if value, ok := _u.mutation.AccessType(); ok {
+		_spec.SetField(usagelog.FieldAccessType, field.TypeString, value)
+	}
+	if _u.mutation.AccessTypeCleared() {
+		_spec.ClearField(usagelog.FieldAccessType, field.TypeString)
+	}
+	if value, ok := _u.mutation.ClientCountry(); ok {
+		_spec.SetField(usagelog.FieldClientCountry, field.TypeString, value)
+	}
+	if _u.mutation.ClientCountryCleared() {
+		_spec.ClearField(usagelog.FieldClientCountry, field.TypeString)
+	}
+	if value, ok := _u.mutation.ClientRegion(); ok {
+		_spec.SetField(usagelog.FieldClientRegion, field.TypeString, value)
+	}
+	if _u.mutation.ClientRegionCleared() {
+		_spec.ClearField(usagelog.FieldClientRegion, field.TypeString)
 	}
 	if value, ok := _u.mutation.UserAgent(); ok {
 		_spec.SetField(usagelog.FieldUserAgent, field.TypeString, value)
@@ -1893,6 +2166,201 @@ func (_u *UsageLogUpdateOne) ClearFirstTokenMs() *UsageLogUpdateOne {
 	return _u
 }
 
+// SetServerProcessingMs sets the "server_processing_ms" field.
+func (_u *UsageLogUpdateOne) SetServerProcessingMs(v int) *UsageLogUpdateOne {
+	_u.mutation.ResetServerProcessingMs()
+	_u.mutation.SetServerProcessingMs(v)
+	return _u
+}
+
+// SetNillableServerProcessingMs sets the "server_processing_ms" field if the given value is not nil.
+func (_u *UsageLogUpdateOne) SetNillableServerProcessingMs(v *int) *UsageLogUpdateOne {
+	if v != nil {
+		_u.SetServerProcessingMs(*v)
+	}
+	return _u
+}
+
+// AddServerProcessingMs adds value to the "server_processing_ms" field.
+func (_u *UsageLogUpdateOne) AddServerProcessingMs(v int) *UsageLogUpdateOne {
+	_u.mutation.AddServerProcessingMs(v)
+	return _u
+}
+
+// ClearServerProcessingMs clears the value of the "server_processing_ms" field.
+func (_u *UsageLogUpdateOne) ClearServerProcessingMs() *UsageLogUpdateOne {
+	_u.mutation.ClearServerProcessingMs()
+	return _u
+}
+
+// SetUpstreamTtfbMs sets the "upstream_ttfb_ms" field.
+func (_u *UsageLogUpdateOne) SetUpstreamTtfbMs(v int) *UsageLogUpdateOne {
+	_u.mutation.ResetUpstreamTtfbMs()
+	_u.mutation.SetUpstreamTtfbMs(v)
+	return _u
+}
+
+// SetNillableUpstreamTtfbMs sets the "upstream_ttfb_ms" field if the given value is not nil.
+func (_u *UsageLogUpdateOne) SetNillableUpstreamTtfbMs(v *int) *UsageLogUpdateOne {
+	if v != nil {
+		_u.SetUpstreamTtfbMs(*v)
+	}
+	return _u
+}
+
+// AddUpstreamTtfbMs adds value to the "upstream_ttfb_ms" field.
+func (_u *UsageLogUpdateOne) AddUpstreamTtfbMs(v int) *UsageLogUpdateOne {
+	_u.mutation.AddUpstreamTtfbMs(v)
+	return _u
+}
+
+// ClearUpstreamTtfbMs clears the value of the "upstream_ttfb_ms" field.
+func (_u *UsageLogUpdateOne) ClearUpstreamTtfbMs() *UsageLogUpdateOne {
+	_u.mutation.ClearUpstreamTtfbMs()
+	return _u
+}
+
+// SetUpstreamStreamMs sets the "upstream_stream_ms" field.
+func (_u *UsageLogUpdateOne) SetUpstreamStreamMs(v int) *UsageLogUpdateOne {
+	_u.mutation.ResetUpstreamStreamMs()
+	_u.mutation.SetUpstreamStreamMs(v)
+	return _u
+}
+
+// SetNillableUpstreamStreamMs sets the "upstream_stream_ms" field if the given value is not nil.
+func (_u *UsageLogUpdateOne) SetNillableUpstreamStreamMs(v *int) *UsageLogUpdateOne {
+	if v != nil {
+		_u.SetUpstreamStreamMs(*v)
+	}
+	return _u
+}
+
+// AddUpstreamStreamMs adds value to the "upstream_stream_ms" field.
+func (_u *UsageLogUpdateOne) AddUpstreamStreamMs(v int) *UsageLogUpdateOne {
+	_u.mutation.AddUpstreamStreamMs(v)
+	return _u
+}
+
+// ClearUpstreamStreamMs clears the value of the "upstream_stream_ms" field.
+func (_u *UsageLogUpdateOne) ClearUpstreamStreamMs() *UsageLogUpdateOne {
+	_u.mutation.ClearUpstreamStreamMs()
+	return _u
+}
+
+// SetResponseDeliveryMs sets the "response_delivery_ms" field.
+func (_u *UsageLogUpdateOne) SetResponseDeliveryMs(v int) *UsageLogUpdateOne {
+	_u.mutation.ResetResponseDeliveryMs()
+	_u.mutation.SetResponseDeliveryMs(v)
+	return _u
+}
+
+// SetNillableResponseDeliveryMs sets the "response_delivery_ms" field if the given value is not nil.
+func (_u *UsageLogUpdateOne) SetNillableResponseDeliveryMs(v *int) *UsageLogUpdateOne {
+	if v != nil {
+		_u.SetResponseDeliveryMs(*v)
+	}
+	return _u
+}
+
+// AddResponseDeliveryMs adds value to the "response_delivery_ms" field.
+func (_u *UsageLogUpdateOne) AddResponseDeliveryMs(v int) *UsageLogUpdateOne {
+	_u.mutation.AddResponseDeliveryMs(v)
+	return _u
+}
+
+// ClearResponseDeliveryMs clears the value of the "response_delivery_ms" field.
+func (_u *UsageLogUpdateOne) ClearResponseDeliveryMs() *UsageLogUpdateOne {
+	_u.mutation.ClearResponseDeliveryMs()
+	return _u
+}
+
+// SetTotalLatencyMs sets the "total_latency_ms" field.
+func (_u *UsageLogUpdateOne) SetTotalLatencyMs(v int) *UsageLogUpdateOne {
+	_u.mutation.ResetTotalLatencyMs()
+	_u.mutation.SetTotalLatencyMs(v)
+	return _u
+}
+
+// SetNillableTotalLatencyMs sets the "total_latency_ms" field if the given value is not nil.
+func (_u *UsageLogUpdateOne) SetNillableTotalLatencyMs(v *int) *UsageLogUpdateOne {
+	if v != nil {
+		_u.SetTotalLatencyMs(*v)
+	}
+	return _u
+}
+
+// AddTotalLatencyMs adds value to the "total_latency_ms" field.
+func (_u *UsageLogUpdateOne) AddTotalLatencyMs(v int) *UsageLogUpdateOne {
+	_u.mutation.AddTotalLatencyMs(v)
+	return _u
+}
+
+// ClearTotalLatencyMs clears the value of the "total_latency_ms" field.
+func (_u *UsageLogUpdateOne) ClearTotalLatencyMs() *UsageLogUpdateOne {
+	_u.mutation.ClearTotalLatencyMs()
+	return _u
+}
+
+// SetAccessType sets the "access_type" field.
+func (_u *UsageLogUpdateOne) SetAccessType(v string) *UsageLogUpdateOne {
+	_u.mutation.SetAccessType(v)
+	return _u
+}
+
+// SetNillableAccessType sets the "access_type" field if the given value is not nil.
+func (_u *UsageLogUpdateOne) SetNillableAccessType(v *string) *UsageLogUpdateOne {
+	if v != nil {
+		_u.SetAccessType(*v)
+	}
+	return _u
+}
+
+// ClearAccessType clears the value of the "access_type" field.
+func (_u *UsageLogUpdateOne) ClearAccessType() *UsageLogUpdateOne {
+	_u.mutation.ClearAccessType()
+	return _u
+}
+
+// SetClientCountry sets the "client_country" field.
+func (_u *UsageLogUpdateOne) SetClientCountry(v string) *UsageLogUpdateOne {
+	_u.mutation.SetClientCountry(v)
+	return _u
+}
+
+// SetNillableClientCountry sets the "client_country" field if the given value is not nil.
+func (_u *UsageLogUpdateOne) SetNillableClientCountry(v *string) *UsageLogUpdateOne {
+	if v != nil {
+		_u.SetClientCountry(*v)
+	}
+	return _u
+}
+
+// ClearClientCountry clears the value of the "client_country" field.
+func (_u *UsageLogUpdateOne) ClearClientCountry() *UsageLogUpdateOne {
+	_u.mutation.ClearClientCountry()
+	return _u
+}
+
+// SetClientRegion sets the "client_region" field.
+func (_u *UsageLogUpdateOne) SetClientRegion(v string) *UsageLogUpdateOne {
+	_u.mutation.SetClientRegion(v)
+	return _u
+}
+
+// SetNillableClientRegion sets the "client_region" field if the given value is not nil.
+func (_u *UsageLogUpdateOne) SetNillableClientRegion(v *string) *UsageLogUpdateOne {
+	if v != nil {
+		_u.SetClientRegion(*v)
+	}
+	return _u
+}
+
+// ClearClientRegion clears the value of the "client_region" field.
+func (_u *UsageLogUpdateOne) ClearClientRegion() *UsageLogUpdateOne {
+	_u.mutation.ClearClientRegion()
+	return _u
+}
+
 // SetUserAgent sets the "user_agent" field.
 func (_u *UsageLogUpdateOne) SetUserAgent(v string) *UsageLogUpdateOne {
 	_u.mutation.SetUserAgent(v)
@@ -2125,6 +2593,21 @@ func (_u *UsageLogUpdateOne) check() error {
 			return &ValidationError{Name: "billing_mode", err: fmt.Errorf(`ent: validator failed for field "UsageLog.billing_mode": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.AccessType(); ok {
+		if err := usagelog.AccessTypeValidator(v); err != nil {
+			return &ValidationError{Name: "access_type", err: fmt.Errorf(`ent: validator failed for field "UsageLog.access_type": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.ClientCountry(); ok {
+		if err := usagelog.ClientCountryValidator(v); err != nil {
+			return &ValidationError{Name: "client_country", err: fmt.Errorf(`ent: validator failed for field "UsageLog.client_country": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.ClientRegion(); ok {
+		if err := usagelog.ClientRegionValidator(v); err != nil {
+			return &ValidationError{Name: "client_region", err: fmt.Errorf(`ent: validator failed for field "UsageLog.client_region": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.UserAgent(); ok {
 		if err := usagelog.UserAgentValidator(v); err != nil {
 			return &ValidationError{Name: "user_agent", err: fmt.Errorf(`ent: validator failed for field "UsageLog.user_agent": %w`, err)}
@@ -2339,6 +2822,69 @@ func (_u *UsageLogUpdateOne) sqlSave(ctx context.Context) (_node *UsageLog, err 
 	}
 	if _u.mutation.FirstTokenMsCleared() {
 		_spec.ClearField(usagelog.FieldFirstTokenMs, field.TypeInt)
+	}
+	if value, ok := _u.mutation.ServerProcessingMs(); ok {
+		_spec.SetField(usagelog.FieldServerProcessingMs, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedServerProcessingMs(); ok {
+		_spec.AddField(usagelog.FieldServerProcessingMs, field.TypeInt, value)
+	}
+	if _u.mutation.ServerProcessingMsCleared() {
+		_spec.ClearField(usagelog.FieldServerProcessingMs, field.TypeInt)
+	}
+	if value, ok := _u.mutation.UpstreamTtfbMs(); ok {
+		_spec.SetField(usagelog.FieldUpstreamTtfbMs, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedUpstreamTtfbMs(); ok {
+		_spec.AddField(usagelog.FieldUpstreamTtfbMs, field.TypeInt, value)
+	}
+	if _u.mutation.UpstreamTtfbMsCleared() {
+		_spec.ClearField(usagelog.FieldUpstreamTtfbMs, field.TypeInt)
+	}
+	if value, ok := _u.mutation.UpstreamStreamMs(); ok {
+		_spec.SetField(usagelog.FieldUpstreamStreamMs, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedUpstreamStreamMs(); ok {
+		_spec.AddField(usagelog.FieldUpstreamStreamMs, field.TypeInt, value)
+	}
+	if _u.mutation.UpstreamStreamMsCleared() {
+		_spec.ClearField(usagelog.FieldUpstreamStreamMs, field.TypeInt)
+	}
+	if value, ok := _u.mutation.ResponseDeliveryMs(); ok {
+		_spec.SetField(usagelog.FieldResponseDeliveryMs, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedResponseDeliveryMs(); ok {
+		_spec.AddField(usagelog.FieldResponseDeliveryMs, field.TypeInt, value)
+	}
+	if _u.mutation.ResponseDeliveryMsCleared() {
+		_spec.ClearField(usagelog.FieldResponseDeliveryMs, field.TypeInt)
+	}
+	if value, ok := _u.mutation.TotalLatencyMs(); ok {
+		_spec.SetField(usagelog.FieldTotalLatencyMs, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedTotalLatencyMs(); ok {
+		_spec.AddField(usagelog.FieldTotalLatencyMs, field.TypeInt, value)
+	}
+	if _u.mutation.TotalLatencyMsCleared() {
+		_spec.ClearField(usagelog.FieldTotalLatencyMs, field.TypeInt)
+	}
+	if value, ok := _u.mutation.AccessType(); ok {
+		_spec.SetField(usagelog.FieldAccessType, field.TypeString, value)
+	}
+	if _u.mutation.AccessTypeCleared() {
+		_spec.ClearField(usagelog.FieldAccessType, field.TypeString)
+	}
+	if value, ok := _u.mutation.ClientCountry(); ok {
+		_spec.SetField(usagelog.FieldClientCountry, field.TypeString, value)
+	}
+	if _u.mutation.ClientCountryCleared() {
+		_spec.ClearField(usagelog.FieldClientCountry, field.TypeString)
+	}
+	if value, ok := _u.mutation.ClientRegion(); ok {
+		_spec.SetField(usagelog.FieldClientRegion, field.TypeString, value)
+	}
+	if _u.mutation.ClientRegionCleared() {
+		_spec.ClearField(usagelog.FieldClientRegion, field.TypeString)
 	}
 	if value, ok := _u.mutation.UserAgent(); ok {
 		_spec.SetField(usagelog.FieldUserAgent, field.TypeString, value)

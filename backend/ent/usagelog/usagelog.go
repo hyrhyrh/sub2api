@@ -76,6 +76,22 @@ const (
 	FieldDurationMs = "duration_ms"
 	// FieldFirstTokenMs holds the string denoting the first_token_ms field in the database.
 	FieldFirstTokenMs = "first_token_ms"
+	// FieldServerProcessingMs holds the string denoting the server_processing_ms field in the database.
+	FieldServerProcessingMs = "server_processing_ms"
+	// FieldUpstreamTtfbMs holds the string denoting the upstream_ttfb_ms field in the database.
+	FieldUpstreamTtfbMs = "upstream_ttfb_ms"
+	// FieldUpstreamStreamMs holds the string denoting the upstream_stream_ms field in the database.
+	FieldUpstreamStreamMs = "upstream_stream_ms"
+	// FieldResponseDeliveryMs holds the string denoting the response_delivery_ms field in the database.
+	FieldResponseDeliveryMs = "response_delivery_ms"
+	// FieldTotalLatencyMs holds the string denoting the total_latency_ms field in the database.
+	FieldTotalLatencyMs = "total_latency_ms"
+	// FieldAccessType holds the string denoting the access_type field in the database.
+	FieldAccessType = "access_type"
+	// FieldClientCountry holds the string denoting the client_country field in the database.
+	FieldClientCountry = "client_country"
+	// FieldClientRegion holds the string denoting the client_region field in the database.
+	FieldClientRegion = "client_region"
 	// FieldUserAgent holds the string denoting the user_agent field in the database.
 	FieldUserAgent = "user_agent"
 	// FieldIPAddress holds the string denoting the ip_address field in the database.
@@ -171,6 +187,14 @@ var Columns = []string{
 	FieldStream,
 	FieldDurationMs,
 	FieldFirstTokenMs,
+	FieldServerProcessingMs,
+	FieldUpstreamTtfbMs,
+	FieldUpstreamStreamMs,
+	FieldResponseDeliveryMs,
+	FieldTotalLatencyMs,
+	FieldAccessType,
+	FieldClientCountry,
+	FieldClientRegion,
 	FieldUserAgent,
 	FieldIPAddress,
 	FieldImageCount,
@@ -234,6 +258,12 @@ var (
 	DefaultBillingType int8
 	// DefaultStream holds the default value on creation for the "stream" field.
 	DefaultStream bool
+	// AccessTypeValidator is a validator for the "access_type" field. It is called by the builders before save.
+	AccessTypeValidator func(string) error
+	// ClientCountryValidator is a validator for the "client_country" field. It is called by the builders before save.
+	ClientCountryValidator func(string) error
+	// ClientRegionValidator is a validator for the "client_region" field. It is called by the builders before save.
+	ClientRegionValidator func(string) error
 	// UserAgentValidator is a validator for the "user_agent" field. It is called by the builders before save.
 	UserAgentValidator func(string) error
 	// IPAddressValidator is a validator for the "ip_address" field. It is called by the builders before save.
@@ -409,6 +439,46 @@ func ByDurationMs(opts ...sql.OrderTermOption) OrderOption {
 // ByFirstTokenMs orders the results by the first_token_ms field.
 func ByFirstTokenMs(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldFirstTokenMs, opts...).ToFunc()
+}
+
+// ByServerProcessingMs orders the results by the server_processing_ms field.
+func ByServerProcessingMs(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldServerProcessingMs, opts...).ToFunc()
+}
+
+// ByUpstreamTtfbMs orders the results by the upstream_ttfb_ms field.
+func ByUpstreamTtfbMs(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldUpstreamTtfbMs, opts...).ToFunc()
+}
+
+// ByUpstreamStreamMs orders the results by the upstream_stream_ms field.
+func ByUpstreamStreamMs(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldUpstreamStreamMs, opts...).ToFunc()
+}
+
+// ByResponseDeliveryMs orders the results by the response_delivery_ms field.
+func ByResponseDeliveryMs(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldResponseDeliveryMs, opts...).ToFunc()
+}
+
+// ByTotalLatencyMs orders the results by the total_latency_ms field.
+func ByTotalLatencyMs(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldTotalLatencyMs, opts...).ToFunc()
+}
+
+// ByAccessType orders the results by the access_type field.
+func ByAccessType(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldAccessType, opts...).ToFunc()
+}
+
+// ByClientCountry orders the results by the client_country field.
+func ByClientCountry(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldClientCountry, opts...).ToFunc()
+}
+
+// ByClientRegion orders the results by the client_region field.
+func ByClientRegion(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldClientRegion, opts...).ToFunc()
 }
 
 // ByUserAgent orders the results by the user_agent field.

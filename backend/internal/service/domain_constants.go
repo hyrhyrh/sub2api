@@ -309,6 +309,11 @@ const (
 	// sidebar entry is hidden. Defaults to false (opt-in feature).
 	SettingKeyAvailableChannelsEnabled = "available_channels_enabled"
 
+	// SettingKeySpeedtestPublicEnabled controls whether the public /speedtest RTT page
+	// is open to all visitors (true) or restricted to admins only (false).
+	// Defaults to false (opt-in feature).
+	SettingKeySpeedtestPublicEnabled = "speedtest_public_enabled"
+
 	// =========================
 	// Overload Cooldown (529)
 	// =========================

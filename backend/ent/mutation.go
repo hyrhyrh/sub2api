@@ -14793,6 +14793,9 @@ type GroupMutation struct {
 	messages_dispatch_model_config          *domain.OpenAIMessagesDispatchModelConfig
 	rpm_limit                               *int
 	addrpm_limit                            *int
+	kiro_cache_emulation_enabled            *bool
+	kiro_cache_emulation_ratio              *float64
+	addkiro_cache_emulation_ratio           *float64
 	clearedFields                           map[string]struct{}
 	api_keys                                map[int64]struct{}
 	removedapi_keys                         map[int64]struct{}
@@ -16565,6 +16568,98 @@ func (m *GroupMutation) ResetRpmLimit() {
 	m.addrpm_limit = nil
 }
 
+// SetKiroCacheEmulationEnabled sets the "kiro_cache_emulation_enabled" field.
+func (m *GroupMutation) SetKiroCacheEmulationEnabled(b bool) {
+	m.kiro_cache_emulation_enabled = &b
+}
+
+// KiroCacheEmulationEnabled returns the value of the "kiro_cache_emulation_enabled" field in the mutation.
+func (m *GroupMutation) KiroCacheEmulationEnabled() (r bool, exists bool) {
+	v := m.kiro_cache_emulation_enabled
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldKiroCacheEmulationEnabled returns the old "kiro_cache_emulation_enabled" field's value of the Group entity.
+// If the Group object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupMutation) OldKiroCacheEmulationEnabled(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldKiroCacheEmulationEnabled is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldKiroCacheEmulationEnabled requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldKiroCacheEmulationEnabled: %w", err)
+	}
+	return oldValue.KiroCacheEmulationEnabled, nil
+}
+
+// ResetKiroCacheEmulationEnabled resets all changes to the "kiro_cache_emulation_enabled" field.
+func (m *GroupMutation) ResetKiroCacheEmulationEnabled() {
+	m.kiro_cache_emulation_enabled = nil
+}
+
+// SetKiroCacheEmulationRatio sets the "kiro_cache_emulation_ratio" field.
+func (m *GroupMutation) SetKiroCacheEmulationRatio(f float64) {
+	m.kiro_cache_emulation_ratio = &f
+	m.addkiro_cache_emulation_ratio = nil
+}
+
+// KiroCacheEmulationRatio returns the value of the "kiro_cache_emulation_ratio" field in the mutation.
+func (m *GroupMutation) KiroCacheEmulationRatio() (r float64, exists bool) {
+	v := m.kiro_cache_emulation_ratio
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldKiroCacheEmulationRatio returns the old "kiro_cache_emulation_ratio" field's value of the Group entity.
+// If the Group object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupMutation) OldKiroCacheEmulationRatio(ctx context.Context) (v float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldKiroCacheEmulationRatio is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldKiroCacheEmulationRatio requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldKiroCacheEmulationRatio: %w", err)
+	}
+	return oldValue.KiroCacheEmulationRatio, nil
+}
+
+// AddKiroCacheEmulationRatio adds f to the "kiro_cache_emulation_ratio" field.
+func (m *GroupMutation) AddKiroCacheEmulationRatio(f float64) {
+	if m.addkiro_cache_emulation_ratio != nil {
+		*m.addkiro_cache_emulation_ratio += f
+	} else {
+		m.addkiro_cache_emulation_ratio = &f
+	}
+}
+
+// AddedKiroCacheEmulationRatio returns the value that was added to the "kiro_cache_emulation_ratio" field in this mutation.
+func (m *GroupMutation) AddedKiroCacheEmulationRatio() (r float64, exists bool) {
+	v := m.addkiro_cache_emulation_ratio
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetKiroCacheEmulationRatio resets all changes to the "kiro_cache_emulation_ratio" field.
+func (m *GroupMutation) ResetKiroCacheEmulationRatio() {
+	m.kiro_cache_emulation_ratio = nil
+	m.addkiro_cache_emulation_ratio = nil
+}
+
 // AddAPIKeyIDs adds the "api_keys" edge to the APIKey entity by ids.
 func (m *GroupMutation) AddAPIKeyIDs(ids ...int64) {
 	if m.api_keys == nil {
@@ -16923,7 +17018,7 @@ func (m *GroupMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *GroupMutation) Fields() []string {
-	fields := make([]string, 0, 34)
+	fields := make([]string, 0, 36)
 	if m.created_at != nil {
 		fields = append(fields, group.FieldCreatedAt)
 	}
@@ -17026,6 +17121,12 @@ func (m *GroupMutation) Fields() []string {
 	if m.rpm_limit != nil {
 		fields = append(fields, group.FieldRpmLimit)
 	}
+	if m.kiro_cache_emulation_enabled != nil {
+		fields = append(fields, group.FieldKiroCacheEmulationEnabled)
+	}
+	if m.kiro_cache_emulation_ratio != nil {
+		fields = append(fields, group.FieldKiroCacheEmulationRatio)
+	}
 	return fields
 }
 
@@ -17102,6 +17203,10 @@ func (m *GroupMutation) Field(name string) (ent.Value, bool) {
 		return m.MessagesDispatchModelConfig()
 	case group.FieldRpmLimit:
 		return m.RpmLimit()
+	case group.FieldKiroCacheEmulationEnabled:
+		return m.KiroCacheEmulationEnabled()
+	case group.FieldKiroCacheEmulationRatio:
+		return m.KiroCacheEmulationRatio()
 	}
 	return nil, false
 }
@@ -17179,6 +17284,10 @@ func (m *GroupMutation) OldField(ctx context.Context, name string) (ent.Value, e
 		return m.OldMessagesDispatchModelConfig(ctx)
 	case group.FieldRpmLimit:
 		return m.OldRpmLimit(ctx)
+	case group.FieldKiroCacheEmulationEnabled:
+		return m.OldKiroCacheEmulationEnabled(ctx)
+	case group.FieldKiroCacheEmulationRatio:
+		return m.OldKiroCacheEmulationRatio(ctx)
 	}
 	return nil, fmt.Errorf("unknown Group field %s", name)
 }
@@ -17426,6 +17535,20 @@ func (m *GroupMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetRpmLimit(v)
 		return nil
+	case group.FieldKiroCacheEmulationEnabled:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetKiroCacheEmulationEnabled(v)
+		return nil
+	case group.FieldKiroCacheEmulationRatio:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetKiroCacheEmulationRatio(v)
+		return nil
 	}
 	return fmt.Errorf("unknown Group field %s", name)
 }
@@ -17473,6 +17596,9 @@ func (m *GroupMutation) AddedFields() []string {
 	if m.addrpm_limit != nil {
 		fields = append(fields, group.FieldRpmLimit)
 	}
+	if m.addkiro_cache_emulation_ratio != nil {
+		fields = append(fields, group.FieldKiroCacheEmulationRatio)
+	}
 	return fields
 }
 
@@ -17507,6 +17633,8 @@ func (m *GroupMutation) AddedField(name string) (ent.Value, bool) {
 		return m.AddedSortOrder()
 	case group.FieldRpmLimit:
 		return m.AddedRpmLimit()
+	case group.FieldKiroCacheEmulationRatio:
+		return m.AddedKiroCacheEmulationRatio()
 	}
 	return nil, false
 }
@@ -17606,6 +17734,13 @@ func (m *GroupMutation) AddField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.AddRpmLimit(v)
+		return nil
+	case group.FieldKiroCacheEmulationRatio:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddKiroCacheEmulationRatio(v)
 		return nil
 	}
 	return fmt.Errorf("unknown Group numeric field %s", name)
@@ -17804,6 +17939,12 @@ func (m *GroupMutation) ResetField(name string) error {
 		return nil
 	case group.FieldRpmLimit:
 		m.ResetRpmLimit()
+		return nil
+	case group.FieldKiroCacheEmulationEnabled:
+		m.ResetKiroCacheEmulationEnabled()
+		return nil
+	case group.FieldKiroCacheEmulationRatio:
+		m.ResetKiroCacheEmulationRatio()
 		return nil
 	}
 	return fmt.Errorf("unknown Group field %s", name)
@@ -34255,6 +34396,19 @@ type UsageLogMutation struct {
 	addduration_ms              *int
 	first_token_ms              *int
 	addfirst_token_ms           *int
+	server_processing_ms        *int
+	addserver_processing_ms     *int
+	upstream_ttfb_ms            *int
+	addupstream_ttfb_ms         *int
+	upstream_stream_ms          *int
+	addupstream_stream_ms       *int
+	response_delivery_ms        *int
+	addresponse_delivery_ms     *int
+	total_latency_ms            *int
+	addtotal_latency_ms         *int
+	access_type                 *string
+	client_country              *string
+	client_region               *string
 	user_agent                  *string
 	ip_address                  *string
 	image_count                 *int
@@ -35999,6 +36153,503 @@ func (m *UsageLogMutation) ResetFirstTokenMs() {
 	delete(m.clearedFields, usagelog.FieldFirstTokenMs)
 }
 
+// SetServerProcessingMs sets the "server_processing_ms" field.
+func (m *UsageLogMutation) SetServerProcessingMs(i int) {
+	m.server_processing_ms = &i
+	m.addserver_processing_ms = nil
+}
+
+// ServerProcessingMs returns the value of the "server_processing_ms" field in the mutation.
+func (m *UsageLogMutation) ServerProcessingMs() (r int, exists bool) {
+	v := m.server_processing_ms
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldServerProcessingMs returns the old "server_processing_ms" field's value of the UsageLog entity.
+// If the UsageLog object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UsageLogMutation) OldServerProcessingMs(ctx context.Context) (v *int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldServerProcessingMs is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldServerProcessingMs requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldServerProcessingMs: %w", err)
+	}
+	return oldValue.ServerProcessingMs, nil
+}
+
+// AddServerProcessingMs adds i to the "server_processing_ms" field.
+func (m *UsageLogMutation) AddServerProcessingMs(i int) {
+	if m.addserver_processing_ms != nil {
+		*m.addserver_processing_ms += i
+	} else {
+		m.addserver_processing_ms = &i
+	}
+}
+
+// AddedServerProcessingMs returns the value that was added to the "server_processing_ms" field in this mutation.
+func (m *UsageLogMutation) AddedServerProcessingMs() (r int, exists bool) {
+	v := m.addserver_processing_ms
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearServerProcessingMs clears the value of the "server_processing_ms" field.
+func (m *UsageLogMutation) ClearServerProcessingMs() {
+	m.server_processing_ms = nil
+	m.addserver_processing_ms = nil
+	m.clearedFields[usagelog.FieldServerProcessingMs] = struct{}{}
+}
+
+// ServerProcessingMsCleared returns if the "server_processing_ms" field was cleared in this mutation.
+func (m *UsageLogMutation) ServerProcessingMsCleared() bool {
+	_, ok := m.clearedFields[usagelog.FieldServerProcessingMs]
+	return ok
+}
+
+// ResetServerProcessingMs resets all changes to the "server_processing_ms" field.
+func (m *UsageLogMutation) ResetServerProcessingMs() {
+	m.server_processing_ms = nil
+	m.addserver_processing_ms = nil
+	delete(m.clearedFields, usagelog.FieldServerProcessingMs)
+}
+
+// SetUpstreamTtfbMs sets the "upstream_ttfb_ms" field.
+func (m *UsageLogMutation) SetUpstreamTtfbMs(i int) {
+	m.upstream_ttfb_ms = &i
+	m.addupstream_ttfb_ms = nil
+}
+
+// UpstreamTtfbMs returns the value of the "upstream_ttfb_ms" field in the mutation.
+func (m *UsageLogMutation) UpstreamTtfbMs() (r int, exists bool) {
+	v := m.upstream_ttfb_ms
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpstreamTtfbMs returns the old "upstream_ttfb_ms" field's value of the UsageLog entity.
+// If the UsageLog object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UsageLogMutation) OldUpstreamTtfbMs(ctx context.Context) (v *int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpstreamTtfbMs is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpstreamTtfbMs requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpstreamTtfbMs: %w", err)
+	}
+	return oldValue.UpstreamTtfbMs, nil
+}
+
+// AddUpstreamTtfbMs adds i to the "upstream_ttfb_ms" field.
+func (m *UsageLogMutation) AddUpstreamTtfbMs(i int) {
+	if m.addupstream_ttfb_ms != nil {
+		*m.addupstream_ttfb_ms += i
+	} else {
+		m.addupstream_ttfb_ms = &i
+	}
+}
+
+// AddedUpstreamTtfbMs returns the value that was added to the "upstream_ttfb_ms" field in this mutation.
+func (m *UsageLogMutation) AddedUpstreamTtfbMs() (r int, exists bool) {
+	v := m.addupstream_ttfb_ms
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearUpstreamTtfbMs clears the value of the "upstream_ttfb_ms" field.
+func (m *UsageLogMutation) ClearUpstreamTtfbMs() {
+	m.upstream_ttfb_ms = nil
+	m.addupstream_ttfb_ms = nil
+	m.clearedFields[usagelog.FieldUpstreamTtfbMs] = struct{}{}
+}
+
+// UpstreamTtfbMsCleared returns if the "upstream_ttfb_ms" field was cleared in this mutation.
+func (m *UsageLogMutation) UpstreamTtfbMsCleared() bool {
+	_, ok := m.clearedFields[usagelog.FieldUpstreamTtfbMs]
+	return ok
+}
+
+// ResetUpstreamTtfbMs resets all changes to the "upstream_ttfb_ms" field.
+func (m *UsageLogMutation) ResetUpstreamTtfbMs() {
+	m.upstream_ttfb_ms = nil
+	m.addupstream_ttfb_ms = nil
+	delete(m.clearedFields, usagelog.FieldUpstreamTtfbMs)
+}
+
+// SetUpstreamStreamMs sets the "upstream_stream_ms" field.
+func (m *UsageLogMutation) SetUpstreamStreamMs(i int) {
+	m.upstream_stream_ms = &i
+	m.addupstream_stream_ms = nil
+}
+
+// UpstreamStreamMs returns the value of the "upstream_stream_ms" field in the mutation.
+func (m *UsageLogMutation) UpstreamStreamMs() (r int, exists bool) {
+	v := m.upstream_stream_ms
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpstreamStreamMs returns the old "upstream_stream_ms" field's value of the UsageLog entity.
+// If the UsageLog object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UsageLogMutation) OldUpstreamStreamMs(ctx context.Context) (v *int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpstreamStreamMs is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpstreamStreamMs requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpstreamStreamMs: %w", err)
+	}
+	return oldValue.UpstreamStreamMs, nil
+}
+
+// AddUpstreamStreamMs adds i to the "upstream_stream_ms" field.
+func (m *UsageLogMutation) AddUpstreamStreamMs(i int) {
+	if m.addupstream_stream_ms != nil {
+		*m.addupstream_stream_ms += i
+	} else {
+		m.addupstream_stream_ms = &i
+	}
+}
+
+// AddedUpstreamStreamMs returns the value that was added to the "upstream_stream_ms" field in this mutation.
+func (m *UsageLogMutation) AddedUpstreamStreamMs() (r int, exists bool) {
+	v := m.addupstream_stream_ms
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearUpstreamStreamMs clears the value of the "upstream_stream_ms" field.
+func (m *UsageLogMutation) ClearUpstreamStreamMs() {
+	m.upstream_stream_ms = nil
+	m.addupstream_stream_ms = nil
+	m.clearedFields[usagelog.FieldUpstreamStreamMs] = struct{}{}
+}
+
+// UpstreamStreamMsCleared returns if the "upstream_stream_ms" field was cleared in this mutation.
+func (m *UsageLogMutation) UpstreamStreamMsCleared() bool {
+	_, ok := m.clearedFields[usagelog.FieldUpstreamStreamMs]
+	return ok
+}
+
+// ResetUpstreamStreamMs resets all changes to the "upstream_stream_ms" field.
+func (m *UsageLogMutation) ResetUpstreamStreamMs() {
+	m.upstream_stream_ms = nil
+	m.addupstream_stream_ms = nil
+	delete(m.clearedFields, usagelog.FieldUpstreamStreamMs)
+}
+
+// SetResponseDeliveryMs sets the "response_delivery_ms" field.
+func (m *UsageLogMutation) SetResponseDeliveryMs(i int) {
+	m.response_delivery_ms = &i
+	m.addresponse_delivery_ms = nil
+}
+
+// ResponseDeliveryMs returns the value of the "response_delivery_ms" field in the mutation.
+func (m *UsageLogMutation) ResponseDeliveryMs() (r int, exists bool) {
+	v := m.response_delivery_ms
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldResponseDeliveryMs returns the old "response_delivery_ms" field's value of the UsageLog entity.
+// If the UsageLog object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UsageLogMutation) OldResponseDeliveryMs(ctx context.Context) (v *int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldResponseDeliveryMs is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldResponseDeliveryMs requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldResponseDeliveryMs: %w", err)
+	}
+	return oldValue.ResponseDeliveryMs, nil
+}
+
+// AddResponseDeliveryMs adds i to the "response_delivery_ms" field.
+func (m *UsageLogMutation) AddResponseDeliveryMs(i int) {
+	if m.addresponse_delivery_ms != nil {
+		*m.addresponse_delivery_ms += i
+	} else {
+		m.addresponse_delivery_ms = &i
+	}
+}
+
+// AddedResponseDeliveryMs returns the value that was added to the "response_delivery_ms" field in this mutation.
+func (m *UsageLogMutation) AddedResponseDeliveryMs() (r int, exists bool) {
+	v := m.addresponse_delivery_ms
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearResponseDeliveryMs clears the value of the "response_delivery_ms" field.
+func (m *UsageLogMutation) ClearResponseDeliveryMs() {
+	m.response_delivery_ms = nil
+	m.addresponse_delivery_ms = nil
+	m.clearedFields[usagelog.FieldResponseDeliveryMs] = struct{}{}
+}
+
+// ResponseDeliveryMsCleared returns if the "response_delivery_ms" field was cleared in this mutation.
+func (m *UsageLogMutation) ResponseDeliveryMsCleared() bool {
+	_, ok := m.clearedFields[usagelog.FieldResponseDeliveryMs]
+	return ok
+}
+
+// ResetResponseDeliveryMs resets all changes to the "response_delivery_ms" field.
+func (m *UsageLogMutation) ResetResponseDeliveryMs() {
+	m.response_delivery_ms = nil
+	m.addresponse_delivery_ms = nil
+	delete(m.clearedFields, usagelog.FieldResponseDeliveryMs)
+}
+
+// SetTotalLatencyMs sets the "total_latency_ms" field.
+func (m *UsageLogMutation) SetTotalLatencyMs(i int) {
+	m.total_latency_ms = &i
+	m.addtotal_latency_ms = nil
+}
+
+// TotalLatencyMs returns the value of the "total_latency_ms" field in the mutation.
+func (m *UsageLogMutation) TotalLatencyMs() (r int, exists bool) {
+	v := m.total_latency_ms
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTotalLatencyMs returns the old "total_latency_ms" field's value of the UsageLog entity.
+// If the UsageLog object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UsageLogMutation) OldTotalLatencyMs(ctx context.Context) (v *int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTotalLatencyMs is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTotalLatencyMs requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTotalLatencyMs: %w", err)
+	}
+	return oldValue.TotalLatencyMs, nil
+}
+
+// AddTotalLatencyMs adds i to the "total_latency_ms" field.
+func (m *UsageLogMutation) AddTotalLatencyMs(i int) {
+	if m.addtotal_latency_ms != nil {
+		*m.addtotal_latency_ms += i
+	} else {
+		m.addtotal_latency_ms = &i
+	}
+}
+
+// AddedTotalLatencyMs returns the value that was added to the "total_latency_ms" field in this mutation.
+func (m *UsageLogMutation) AddedTotalLatencyMs() (r int, exists bool) {
+	v := m.addtotal_latency_ms
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearTotalLatencyMs clears the value of the "total_latency_ms" field.
+func (m *UsageLogMutation) ClearTotalLatencyMs() {
+	m.total_latency_ms = nil
+	m.addtotal_latency_ms = nil
+	m.clearedFields[usagelog.FieldTotalLatencyMs] = struct{}{}
+}
+
+// TotalLatencyMsCleared returns if the "total_latency_ms" field was cleared in this mutation.
+func (m *UsageLogMutation) TotalLatencyMsCleared() bool {
+	_, ok := m.clearedFields[usagelog.FieldTotalLatencyMs]
+	return ok
+}
+
+// ResetTotalLatencyMs resets all changes to the "total_latency_ms" field.
+func (m *UsageLogMutation) ResetTotalLatencyMs() {
+	m.total_latency_ms = nil
+	m.addtotal_latency_ms = nil
+	delete(m.clearedFields, usagelog.FieldTotalLatencyMs)
+}
+
+// SetAccessType sets the "access_type" field.
+func (m *UsageLogMutation) SetAccessType(s string) {
+	m.access_type = &s
+}
+
+// AccessType returns the value of the "access_type" field in the mutation.
+func (m *UsageLogMutation) AccessType() (r string, exists bool) {
+	v := m.access_type
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAccessType returns the old "access_type" field's value of the UsageLog entity.
+// If the UsageLog object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UsageLogMutation) OldAccessType(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAccessType is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAccessType requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAccessType: %w", err)
+	}
+	return oldValue.AccessType, nil
+}
+
+// ClearAccessType clears the value of the "access_type" field.
+func (m *UsageLogMutation) ClearAccessType() {
+	m.access_type = nil
+	m.clearedFields[usagelog.FieldAccessType] = struct{}{}
+}
+
+// AccessTypeCleared returns if the "access_type" field was cleared in this mutation.
+func (m *UsageLogMutation) AccessTypeCleared() bool {
+	_, ok := m.clearedFields[usagelog.FieldAccessType]
+	return ok
+}
+
+// ResetAccessType resets all changes to the "access_type" field.
+func (m *UsageLogMutation) ResetAccessType() {
+	m.access_type = nil
+	delete(m.clearedFields, usagelog.FieldAccessType)
+}
+
+// SetClientCountry sets the "client_country" field.
+func (m *UsageLogMutation) SetClientCountry(s string) {
+	m.client_country = &s
+}
+
+// ClientCountry returns the value of the "client_country" field in the mutation.
+func (m *UsageLogMutation) ClientCountry() (r string, exists bool) {
+	v := m.client_country
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldClientCountry returns the old "client_country" field's value of the UsageLog entity.
+// If the UsageLog object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UsageLogMutation) OldClientCountry(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldClientCountry is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldClientCountry requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldClientCountry: %w", err)
+	}
+	return oldValue.ClientCountry, nil
+}
+
+// ClearClientCountry clears the value of the "client_country" field.
+func (m *UsageLogMutation) ClearClientCountry() {
+	m.client_country = nil
+	m.clearedFields[usagelog.FieldClientCountry] = struct{}{}
+}
+
+// ClientCountryCleared returns if the "client_country" field was cleared in this mutation.
+func (m *UsageLogMutation) ClientCountryCleared() bool {
+	_, ok := m.clearedFields[usagelog.FieldClientCountry]
+	return ok
+}
+
+// ResetClientCountry resets all changes to the "client_country" field.
+func (m *UsageLogMutation) ResetClientCountry() {
+	m.client_country = nil
+	delete(m.clearedFields, usagelog.FieldClientCountry)
+}
+
+// SetClientRegion sets the "client_region" field.
+func (m *UsageLogMutation) SetClientRegion(s string) {
+	m.client_region = &s
+}
+
+// ClientRegion returns the value of the "client_region" field in the mutation.
+func (m *UsageLogMutation) ClientRegion() (r string, exists bool) {
+	v := m.client_region
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldClientRegion returns the old "client_region" field's value of the UsageLog entity.
+// If the UsageLog object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UsageLogMutation) OldClientRegion(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldClientRegion is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldClientRegion requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldClientRegion: %w", err)
+	}
+	return oldValue.ClientRegion, nil
+}
+
+// ClearClientRegion clears the value of the "client_region" field.
+func (m *UsageLogMutation) ClearClientRegion() {
+	m.client_region = nil
+	m.clearedFields[usagelog.FieldClientRegion] = struct{}{}
+}
+
+// ClientRegionCleared returns if the "client_region" field was cleared in this mutation.
+func (m *UsageLogMutation) ClientRegionCleared() bool {
+	_, ok := m.clearedFields[usagelog.FieldClientRegion]
+	return ok
+}
+
+// ResetClientRegion resets all changes to the "client_region" field.
+func (m *UsageLogMutation) ResetClientRegion() {
+	m.client_region = nil
+	delete(m.clearedFields, usagelog.FieldClientRegion)
+}
+
 // SetUserAgent sets the "user_agent" field.
 func (m *UsageLogMutation) SetUserAgent(s string) {
 	m.user_agent = &s
@@ -36443,7 +37094,7 @@ func (m *UsageLogMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *UsageLogMutation) Fields() []string {
-	fields := make([]string, 0, 37)
+	fields := make([]string, 0, 45)
 	if m.user != nil {
 		fields = append(fields, usagelog.FieldUserID)
 	}
@@ -36537,6 +37188,30 @@ func (m *UsageLogMutation) Fields() []string {
 	if m.first_token_ms != nil {
 		fields = append(fields, usagelog.FieldFirstTokenMs)
 	}
+	if m.server_processing_ms != nil {
+		fields = append(fields, usagelog.FieldServerProcessingMs)
+	}
+	if m.upstream_ttfb_ms != nil {
+		fields = append(fields, usagelog.FieldUpstreamTtfbMs)
+	}
+	if m.upstream_stream_ms != nil {
+		fields = append(fields, usagelog.FieldUpstreamStreamMs)
+	}
+	if m.response_delivery_ms != nil {
+		fields = append(fields, usagelog.FieldResponseDeliveryMs)
+	}
+	if m.total_latency_ms != nil {
+		fields = append(fields, usagelog.FieldTotalLatencyMs)
+	}
+	if m.access_type != nil {
+		fields = append(fields, usagelog.FieldAccessType)
+	}
+	if m.client_country != nil {
+		fields = append(fields, usagelog.FieldClientCountry)
+	}
+	if m.client_region != nil {
+		fields = append(fields, usagelog.FieldClientRegion)
+	}
 	if m.user_agent != nil {
 		fields = append(fields, usagelog.FieldUserAgent)
 	}
@@ -36625,6 +37300,22 @@ func (m *UsageLogMutation) Field(name string) (ent.Value, bool) {
 		return m.DurationMs()
 	case usagelog.FieldFirstTokenMs:
 		return m.FirstTokenMs()
+	case usagelog.FieldServerProcessingMs:
+		return m.ServerProcessingMs()
+	case usagelog.FieldUpstreamTtfbMs:
+		return m.UpstreamTtfbMs()
+	case usagelog.FieldUpstreamStreamMs:
+		return m.UpstreamStreamMs()
+	case usagelog.FieldResponseDeliveryMs:
+		return m.ResponseDeliveryMs()
+	case usagelog.FieldTotalLatencyMs:
+		return m.TotalLatencyMs()
+	case usagelog.FieldAccessType:
+		return m.AccessType()
+	case usagelog.FieldClientCountry:
+		return m.ClientCountry()
+	case usagelog.FieldClientRegion:
+		return m.ClientRegion()
 	case usagelog.FieldUserAgent:
 		return m.UserAgent()
 	case usagelog.FieldIPAddress:
@@ -36708,6 +37399,22 @@ func (m *UsageLogMutation) OldField(ctx context.Context, name string) (ent.Value
 		return m.OldDurationMs(ctx)
 	case usagelog.FieldFirstTokenMs:
 		return m.OldFirstTokenMs(ctx)
+	case usagelog.FieldServerProcessingMs:
+		return m.OldServerProcessingMs(ctx)
+	case usagelog.FieldUpstreamTtfbMs:
+		return m.OldUpstreamTtfbMs(ctx)
+	case usagelog.FieldUpstreamStreamMs:
+		return m.OldUpstreamStreamMs(ctx)
+	case usagelog.FieldResponseDeliveryMs:
+		return m.OldResponseDeliveryMs(ctx)
+	case usagelog.FieldTotalLatencyMs:
+		return m.OldTotalLatencyMs(ctx)
+	case usagelog.FieldAccessType:
+		return m.OldAccessType(ctx)
+	case usagelog.FieldClientCountry:
+		return m.OldClientCountry(ctx)
+	case usagelog.FieldClientRegion:
+		return m.OldClientRegion(ctx)
 	case usagelog.FieldUserAgent:
 		return m.OldUserAgent(ctx)
 	case usagelog.FieldIPAddress:
@@ -36946,6 +37653,62 @@ func (m *UsageLogMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetFirstTokenMs(v)
 		return nil
+	case usagelog.FieldServerProcessingMs:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetServerProcessingMs(v)
+		return nil
+	case usagelog.FieldUpstreamTtfbMs:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpstreamTtfbMs(v)
+		return nil
+	case usagelog.FieldUpstreamStreamMs:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpstreamStreamMs(v)
+		return nil
+	case usagelog.FieldResponseDeliveryMs:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetResponseDeliveryMs(v)
+		return nil
+	case usagelog.FieldTotalLatencyMs:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTotalLatencyMs(v)
+		return nil
+	case usagelog.FieldAccessType:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAccessType(v)
+		return nil
+	case usagelog.FieldClientCountry:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetClientCountry(v)
+		return nil
+	case usagelog.FieldClientRegion:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetClientRegion(v)
+		return nil
 	case usagelog.FieldUserAgent:
 		v, ok := value.(string)
 		if !ok {
@@ -37050,6 +37813,21 @@ func (m *UsageLogMutation) AddedFields() []string {
 	if m.addfirst_token_ms != nil {
 		fields = append(fields, usagelog.FieldFirstTokenMs)
 	}
+	if m.addserver_processing_ms != nil {
+		fields = append(fields, usagelog.FieldServerProcessingMs)
+	}
+	if m.addupstream_ttfb_ms != nil {
+		fields = append(fields, usagelog.FieldUpstreamTtfbMs)
+	}
+	if m.addupstream_stream_ms != nil {
+		fields = append(fields, usagelog.FieldUpstreamStreamMs)
+	}
+	if m.addresponse_delivery_ms != nil {
+		fields = append(fields, usagelog.FieldResponseDeliveryMs)
+	}
+	if m.addtotal_latency_ms != nil {
+		fields = append(fields, usagelog.FieldTotalLatencyMs)
+	}
 	if m.addimage_count != nil {
 		fields = append(fields, usagelog.FieldImageCount)
 	}
@@ -37097,6 +37875,16 @@ func (m *UsageLogMutation) AddedField(name string) (ent.Value, bool) {
 		return m.AddedDurationMs()
 	case usagelog.FieldFirstTokenMs:
 		return m.AddedFirstTokenMs()
+	case usagelog.FieldServerProcessingMs:
+		return m.AddedServerProcessingMs()
+	case usagelog.FieldUpstreamTtfbMs:
+		return m.AddedUpstreamTtfbMs()
+	case usagelog.FieldUpstreamStreamMs:
+		return m.AddedUpstreamStreamMs()
+	case usagelog.FieldResponseDeliveryMs:
+		return m.AddedResponseDeliveryMs()
+	case usagelog.FieldTotalLatencyMs:
+		return m.AddedTotalLatencyMs()
 	case usagelog.FieldImageCount:
 		return m.AddedImageCount()
 	}
@@ -37234,6 +38022,41 @@ func (m *UsageLogMutation) AddField(name string, value ent.Value) error {
 		}
 		m.AddFirstTokenMs(v)
 		return nil
+	case usagelog.FieldServerProcessingMs:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddServerProcessingMs(v)
+		return nil
+	case usagelog.FieldUpstreamTtfbMs:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddUpstreamTtfbMs(v)
+		return nil
+	case usagelog.FieldUpstreamStreamMs:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddUpstreamStreamMs(v)
+		return nil
+	case usagelog.FieldResponseDeliveryMs:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddResponseDeliveryMs(v)
+		return nil
+	case usagelog.FieldTotalLatencyMs:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddTotalLatencyMs(v)
+		return nil
 	case usagelog.FieldImageCount:
 		v, ok := value.(int)
 		if !ok {
@@ -37281,6 +38104,30 @@ func (m *UsageLogMutation) ClearedFields() []string {
 	}
 	if m.FieldCleared(usagelog.FieldFirstTokenMs) {
 		fields = append(fields, usagelog.FieldFirstTokenMs)
+	}
+	if m.FieldCleared(usagelog.FieldServerProcessingMs) {
+		fields = append(fields, usagelog.FieldServerProcessingMs)
+	}
+	if m.FieldCleared(usagelog.FieldUpstreamTtfbMs) {
+		fields = append(fields, usagelog.FieldUpstreamTtfbMs)
+	}
+	if m.FieldCleared(usagelog.FieldUpstreamStreamMs) {
+		fields = append(fields, usagelog.FieldUpstreamStreamMs)
+	}
+	if m.FieldCleared(usagelog.FieldResponseDeliveryMs) {
+		fields = append(fields, usagelog.FieldResponseDeliveryMs)
+	}
+	if m.FieldCleared(usagelog.FieldTotalLatencyMs) {
+		fields = append(fields, usagelog.FieldTotalLatencyMs)
+	}
+	if m.FieldCleared(usagelog.FieldAccessType) {
+		fields = append(fields, usagelog.FieldAccessType)
+	}
+	if m.FieldCleared(usagelog.FieldClientCountry) {
+		fields = append(fields, usagelog.FieldClientCountry)
+	}
+	if m.FieldCleared(usagelog.FieldClientRegion) {
+		fields = append(fields, usagelog.FieldClientRegion)
 	}
 	if m.FieldCleared(usagelog.FieldUserAgent) {
 		fields = append(fields, usagelog.FieldUserAgent)
@@ -37337,6 +38184,30 @@ func (m *UsageLogMutation) ClearField(name string) error {
 		return nil
 	case usagelog.FieldFirstTokenMs:
 		m.ClearFirstTokenMs()
+		return nil
+	case usagelog.FieldServerProcessingMs:
+		m.ClearServerProcessingMs()
+		return nil
+	case usagelog.FieldUpstreamTtfbMs:
+		m.ClearUpstreamTtfbMs()
+		return nil
+	case usagelog.FieldUpstreamStreamMs:
+		m.ClearUpstreamStreamMs()
+		return nil
+	case usagelog.FieldResponseDeliveryMs:
+		m.ClearResponseDeliveryMs()
+		return nil
+	case usagelog.FieldTotalLatencyMs:
+		m.ClearTotalLatencyMs()
+		return nil
+	case usagelog.FieldAccessType:
+		m.ClearAccessType()
+		return nil
+	case usagelog.FieldClientCountry:
+		m.ClearClientCountry()
+		return nil
+	case usagelog.FieldClientRegion:
+		m.ClearClientRegion()
 		return nil
 	case usagelog.FieldUserAgent:
 		m.ClearUserAgent()
@@ -37447,6 +38318,30 @@ func (m *UsageLogMutation) ResetField(name string) error {
 		return nil
 	case usagelog.FieldFirstTokenMs:
 		m.ResetFirstTokenMs()
+		return nil
+	case usagelog.FieldServerProcessingMs:
+		m.ResetServerProcessingMs()
+		return nil
+	case usagelog.FieldUpstreamTtfbMs:
+		m.ResetUpstreamTtfbMs()
+		return nil
+	case usagelog.FieldUpstreamStreamMs:
+		m.ResetUpstreamStreamMs()
+		return nil
+	case usagelog.FieldResponseDeliveryMs:
+		m.ResetResponseDeliveryMs()
+		return nil
+	case usagelog.FieldTotalLatencyMs:
+		m.ResetTotalLatencyMs()
+		return nil
+	case usagelog.FieldAccessType:
+		m.ResetAccessType()
+		return nil
+	case usagelog.FieldClientCountry:
+		m.ResetClientCountry()
+		return nil
+	case usagelog.FieldClientRegion:
+		m.ResetClientRegion()
 		return nil
 	case usagelog.FieldUserAgent:
 		m.ResetUserAgent()
