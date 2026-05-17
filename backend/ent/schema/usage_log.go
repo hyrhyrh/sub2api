@@ -118,6 +118,46 @@ func (UsageLog) Fields() []ent.Field {
 		field.Int("first_token_ms").
 			Optional().
 			Nillable(),
+
+		// 5 段延迟分解（Go 视角，单调时钟采集）
+		field.Int("server_processing_ms").
+			Optional().
+			Nillable().
+			Comment("Go 内部处理（鉴权/路由/账号选择）"),
+		field.Int("upstream_ttfb_ms").
+			Optional().
+			Nillable().
+			Comment("发出上游请求 → 收到首字节"),
+		field.Int("upstream_stream_ms").
+			Optional().
+			Nillable().
+			Comment("上游流式生成时长"),
+		field.Int("response_delivery_ms").
+			Optional().
+			Nillable().
+			Comment("Go → 客户端交付耗时（含 nginx → 客户端）"),
+		field.Int("total_latency_ms").
+			Optional().
+			Nillable().
+			Comment("Go 视角端到端总耗时"),
+
+		// 入口类型 + 客户端地理定位
+		field.String("access_type").
+			MaxLen(16).
+			Optional().
+			Nillable().
+			Comment("入口类型: domain | direct_ip"),
+		field.String("client_country").
+			MaxLen(2).
+			Optional().
+			Nillable().
+			Comment("ISO 国家代码, 例如 CN/US"),
+		field.String("client_region").
+			MaxLen(64).
+			Optional().
+			Nillable().
+			Comment("省/州, 例如 Guangdong/California"),
+
 		field.String("user_agent").
 			MaxLen(512).
 			Optional().
@@ -192,5 +232,9 @@ func (UsageLog) Indexes() []ent.Index {
 		index.Fields("api_key_id", "created_at"),
 		// 分组维度时间范围查询（线上由 SQL 迁移创建 group_id IS NOT NULL 的部分索引）
 		index.Fields("group_id", "created_at"),
+		// 延迟分析查询索引
+		index.Fields("created_at", "total_latency_ms"),
+		index.Fields("client_country", "created_at"),
+		index.Fields("access_type", "created_at"),
 	}
 }

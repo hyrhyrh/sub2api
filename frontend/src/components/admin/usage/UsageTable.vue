@@ -166,7 +166,13 @@
         </template>
 
         <template #cell-duration="{ row }">
-          <span class="text-sm text-gray-600 dark:text-gray-400">{{ formatDuration(row.duration_ms) }}</span>
+          <span
+            class="text-sm text-gray-600 dark:text-gray-400"
+            :title="formatLatencyBreakdown(row)"
+          >{{ formatDuration(row.duration_ms) }}<span
+            v-if="(row as any).response_delivery_ms != null"
+            class="ml-1 text-[10px] text-blue-500"
+          >+{{ (row as any).response_delivery_ms }}ms</span></span>
         </template>
 
         <template #cell-created_at="{ value }">
@@ -444,6 +450,23 @@ const formatDuration = (ms: number | null | undefined): string => {
   if (ms == null) return '-'
   if (ms < 1000) return `${ms}ms`
   return `${(ms / 1000).toFixed(2)}s`
+}
+
+// 5 段延迟 hover 文本（plan/latency-tracking-final.md）
+// 字段未必都存在（旧数据 / 中间件未注册），缺失就跳过该行。
+const formatLatencyBreakdown = (row: any): string => {
+  const parts: string[] = []
+  const push = (label: string, v: number | null | undefined) => {
+    if (v != null) parts.push(`${label}: ${formatDuration(v)}`)
+  }
+  push('server', row.server_processing_ms)
+  push('upstream ttfb', row.upstream_ttfb_ms)
+  push('upstream stream', row.upstream_stream_ms)
+  push('delivery', row.response_delivery_ms)
+  push('total', row.total_latency_ms)
+  if (row.access_type) parts.push(`入口: ${row.access_type}`)
+  if (row.client_country) parts.push(`地区: ${row.client_country}${row.client_region ? '/' + row.client_region : ''}`)
+  return parts.length ? parts.join('\n') : `总耗时 ${formatDuration(row.duration_ms)}`
 }
 
 // Cost tooltip functions

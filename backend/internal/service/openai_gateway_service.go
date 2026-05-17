@@ -5197,6 +5197,7 @@ type OpenAIRecordUsageInput struct {
 	RequestPayloadHash string
 	APIKeyService      APIKeyQuotaUpdater
 	ChannelUsageFields
+	LatencyUsageFields
 }
 
 // RecordUsage records usage and deducts balance
@@ -5369,6 +5370,25 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 	// 添加 IPAddress
 	if input.IPAddress != "" {
 		usageLog.IPAddress = &input.IPAddress
+	}
+
+	// 网络延迟分解（plan/latency-tracking-final.md），可空。
+	usageLog.ServerProcessingMs = input.ServerProcessingMs
+	usageLog.UpstreamTTFBMs = input.UpstreamTTFBMs
+	usageLog.UpstreamStreamMs = input.UpstreamStreamMs
+	usageLog.ResponseDeliveryMs = input.ResponseDeliveryMs
+	usageLog.TotalLatencyMs = input.TotalLatencyMs
+	if input.AccessType != "" {
+		v := input.AccessType
+		usageLog.AccessType = &v
+	}
+	if input.ClientCountry != "" {
+		v := input.ClientCountry
+		usageLog.ClientCountry = &v
+	}
+	if input.ClientRegion != "" {
+		v := input.ClientRegion
+		usageLog.ClientRegion = &v
 	}
 
 	if apiKey.GroupID != nil {

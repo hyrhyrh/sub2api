@@ -264,6 +264,8 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 
 		AvailableChannelsEnabled: settings.AvailableChannelsEnabled,
 
+		SpeedtestPublicEnabled: settings.SpeedtestPublicEnabled,
+
 		AffiliateEnabled: settings.AffiliateEnabled,
 	}
 
@@ -566,6 +568,9 @@ type UpdateSettingsRequest struct {
 
 	// Available Channels feature switch (user-facing)
 	AvailableChannelsEnabled *bool `json:"available_channels_enabled"`
+
+	// Speedtest public page switch (when true, /speedtest is open to all visitors)
+	SpeedtestPublicEnabled *bool `json:"speedtest_public_enabled"`
 
 	// Affiliate (邀请返利) feature switch
 	AffiliateEnabled *bool `json:"affiliate_enabled"`
@@ -1517,6 +1522,12 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			}
 			return previousSettings.AvailableChannelsEnabled
 		}(),
+		SpeedtestPublicEnabled: func() bool {
+			if req.SpeedtestPublicEnabled != nil {
+				return *req.SpeedtestPublicEnabled
+			}
+			return previousSettings.SpeedtestPublicEnabled
+		}(),
 		AffiliateEnabled: func() bool {
 			if req.AffiliateEnabled != nil {
 				return *req.AffiliateEnabled
@@ -1808,6 +1819,8 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		ChannelMonitorDefaultIntervalSeconds: updatedSettings.ChannelMonitorDefaultIntervalSeconds,
 
 		AvailableChannelsEnabled: updatedSettings.AvailableChannelsEnabled,
+
+		SpeedtestPublicEnabled: updatedSettings.SpeedtestPublicEnabled,
 
 		AffiliateEnabled: updatedSettings.AffiliateEnabled,
 
@@ -2211,6 +2224,9 @@ func diffSettings(before *service.SystemSettings, after *service.SystemSettings,
 	}
 	if before.ChannelMonitorDefaultIntervalSeconds != after.ChannelMonitorDefaultIntervalSeconds {
 		changed = append(changed, "channel_monitor_default_interval_seconds")
+	}
+	if before.SpeedtestPublicEnabled != after.SpeedtestPublicEnabled {
+		changed = append(changed, "speedtest_public_enabled")
 	}
 	if before.AvailableChannelsEnabled != after.AvailableChannelsEnabled {
 		changed = append(changed, "available_channels_enabled")

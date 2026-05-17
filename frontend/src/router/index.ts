@@ -553,6 +553,25 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/admin/latency',
+    name: 'AdminLatency',
+    component: () => import('@/views/admin/LatencyView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: true,
+      title: '网络延迟诊断'
+    }
+  },
+  {
+    path: '/speedtest',
+    name: 'Speedtest',
+    component: () => import('@/views/SpeedtestView.vue'),
+    meta: {
+      requiresAuth: true,
+      title: '网络测速'
+    }
+  },
+  {
     path: '/admin/affiliates',
     redirect: '/admin/affiliates/invites'
   },

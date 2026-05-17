@@ -421,6 +421,118 @@ func (_c *UsageLogCreate) SetNillableFirstTokenMs(v *int) *UsageLogCreate {
 	return _c
 }
 
+// SetServerProcessingMs sets the "server_processing_ms" field.
+func (_c *UsageLogCreate) SetServerProcessingMs(v int) *UsageLogCreate {
+	_c.mutation.SetServerProcessingMs(v)
+	return _c
+}
+
+// SetNillableServerProcessingMs sets the "server_processing_ms" field if the given value is not nil.
+func (_c *UsageLogCreate) SetNillableServerProcessingMs(v *int) *UsageLogCreate {
+	if v != nil {
+		_c.SetServerProcessingMs(*v)
+	}
+	return _c
+}
+
+// SetUpstreamTtfbMs sets the "upstream_ttfb_ms" field.
+func (_c *UsageLogCreate) SetUpstreamTtfbMs(v int) *UsageLogCreate {
+	_c.mutation.SetUpstreamTtfbMs(v)
+	return _c
+}
+
+// SetNillableUpstreamTtfbMs sets the "upstream_ttfb_ms" field if the given value is not nil.
+func (_c *UsageLogCreate) SetNillableUpstreamTtfbMs(v *int) *UsageLogCreate {
+	if v != nil {
+		_c.SetUpstreamTtfbMs(*v)
+	}
+	return _c
+}
+
+// SetUpstreamStreamMs sets the "upstream_stream_ms" field.
+func (_c *UsageLogCreate) SetUpstreamStreamMs(v int) *UsageLogCreate {
+	_c.mutation.SetUpstreamStreamMs(v)
+	return _c
+}
+
+// SetNillableUpstreamStreamMs sets the "upstream_stream_ms" field if the given value is not nil.
+func (_c *UsageLogCreate) SetNillableUpstreamStreamMs(v *int) *UsageLogCreate {
+	if v != nil {
+		_c.SetUpstreamStreamMs(*v)
+	}
+	return _c
+}
+
+// SetResponseDeliveryMs sets the "response_delivery_ms" field.
+func (_c *UsageLogCreate) SetResponseDeliveryMs(v int) *UsageLogCreate {
+	_c.mutation.SetResponseDeliveryMs(v)
+	return _c
+}
+
+// SetNillableResponseDeliveryMs sets the "response_delivery_ms" field if the given value is not nil.
+func (_c *UsageLogCreate) SetNillableResponseDeliveryMs(v *int) *UsageLogCreate {
+	if v != nil {
+		_c.SetResponseDeliveryMs(*v)
+	}
+	return _c
+}
+
+// SetTotalLatencyMs sets the "total_latency_ms" field.
+func (_c *UsageLogCreate) SetTotalLatencyMs(v int) *UsageLogCreate {
+	_c.mutation.SetTotalLatencyMs(v)
+	return _c
+}
+
+// SetNillableTotalLatencyMs sets the "total_latency_ms" field if the given value is not nil.
+func (_c *UsageLogCreate) SetNillableTotalLatencyMs(v *int) *UsageLogCreate {
+	if v != nil {
+		_c.SetTotalLatencyMs(*v)
+	}
+	return _c
+}
+
+// SetAccessType sets the "access_type" field.
+func (_c *UsageLogCreate) SetAccessType(v string) *UsageLogCreate {
+	_c.mutation.SetAccessType(v)
+	return _c
+}
+
+// SetNillableAccessType sets the "access_type" field if the given value is not nil.
+func (_c *UsageLogCreate) SetNillableAccessType(v *string) *UsageLogCreate {
+	if v != nil {
+		_c.SetAccessType(*v)
+	}
+	return _c
+}
+
+// SetClientCountry sets the "client_country" field.
+func (_c *UsageLogCreate) SetClientCountry(v string) *UsageLogCreate {
+	_c.mutation.SetClientCountry(v)
+	return _c
+}
+
+// SetNillableClientCountry sets the "client_country" field if the given value is not nil.
+func (_c *UsageLogCreate) SetNillableClientCountry(v *string) *UsageLogCreate {
+	if v != nil {
+		_c.SetClientCountry(*v)
+	}
+	return _c
+}
+
+// SetClientRegion sets the "client_region" field.
+func (_c *UsageLogCreate) SetClientRegion(v string) *UsageLogCreate {
+	_c.mutation.SetClientRegion(v)
+	return _c
+}
+
+// SetNillableClientRegion sets the "client_region" field if the given value is not nil.
+func (_c *UsageLogCreate) SetNillableClientRegion(v *string) *UsageLogCreate {
+	if v != nil {
+		_c.SetClientRegion(*v)
+	}
+	return _c
+}
+
 // SetUserAgent sets the "user_agent" field.
 func (_c *UsageLogCreate) SetUserAgent(v string) *UsageLogCreate {
 	_c.mutation.SetUserAgent(v)
@@ -736,6 +848,21 @@ func (_c *UsageLogCreate) check() error {
 	if _, ok := _c.mutation.Stream(); !ok {
 		return &ValidationError{Name: "stream", err: errors.New(`ent: missing required field "UsageLog.stream"`)}
 	}
+	if v, ok := _c.mutation.AccessType(); ok {
+		if err := usagelog.AccessTypeValidator(v); err != nil {
+			return &ValidationError{Name: "access_type", err: fmt.Errorf(`ent: validator failed for field "UsageLog.access_type": %w`, err)}
+		}
+	}
+	if v, ok := _c.mutation.ClientCountry(); ok {
+		if err := usagelog.ClientCountryValidator(v); err != nil {
+			return &ValidationError{Name: "client_country", err: fmt.Errorf(`ent: validator failed for field "UsageLog.client_country": %w`, err)}
+		}
+	}
+	if v, ok := _c.mutation.ClientRegion(); ok {
+		if err := usagelog.ClientRegionValidator(v); err != nil {
+			return &ValidationError{Name: "client_region", err: fmt.Errorf(`ent: validator failed for field "UsageLog.client_region": %w`, err)}
+		}
+	}
 	if v, ok := _c.mutation.UserAgent(); ok {
 		if err := usagelog.UserAgentValidator(v); err != nil {
 			return &ValidationError{Name: "user_agent", err: fmt.Errorf(`ent: validator failed for field "UsageLog.user_agent": %w`, err)}
@@ -899,6 +1026,38 @@ func (_c *UsageLogCreate) createSpec() (*UsageLog, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.FirstTokenMs(); ok {
 		_spec.SetField(usagelog.FieldFirstTokenMs, field.TypeInt, value)
 		_node.FirstTokenMs = &value
+	}
+	if value, ok := _c.mutation.ServerProcessingMs(); ok {
+		_spec.SetField(usagelog.FieldServerProcessingMs, field.TypeInt, value)
+		_node.ServerProcessingMs = &value
+	}
+	if value, ok := _c.mutation.UpstreamTtfbMs(); ok {
+		_spec.SetField(usagelog.FieldUpstreamTtfbMs, field.TypeInt, value)
+		_node.UpstreamTtfbMs = &value
+	}
+	if value, ok := _c.mutation.UpstreamStreamMs(); ok {
+		_spec.SetField(usagelog.FieldUpstreamStreamMs, field.TypeInt, value)
+		_node.UpstreamStreamMs = &value
+	}
+	if value, ok := _c.mutation.ResponseDeliveryMs(); ok {
+		_spec.SetField(usagelog.FieldResponseDeliveryMs, field.TypeInt, value)
+		_node.ResponseDeliveryMs = &value
+	}
+	if value, ok := _c.mutation.TotalLatencyMs(); ok {
+		_spec.SetField(usagelog.FieldTotalLatencyMs, field.TypeInt, value)
+		_node.TotalLatencyMs = &value
+	}
+	if value, ok := _c.mutation.AccessType(); ok {
+		_spec.SetField(usagelog.FieldAccessType, field.TypeString, value)
+		_node.AccessType = &value
+	}
+	if value, ok := _c.mutation.ClientCountry(); ok {
+		_spec.SetField(usagelog.FieldClientCountry, field.TypeString, value)
+		_node.ClientCountry = &value
+	}
+	if value, ok := _c.mutation.ClientRegion(); ok {
+		_spec.SetField(usagelog.FieldClientRegion, field.TypeString, value)
+		_node.ClientRegion = &value
 	}
 	if value, ok := _c.mutation.UserAgent(); ok {
 		_spec.SetField(usagelog.FieldUserAgent, field.TypeString, value)
@@ -1604,6 +1763,180 @@ func (u *UsageLogUpsert) AddFirstTokenMs(v int) *UsageLogUpsert {
 // ClearFirstTokenMs clears the value of the "first_token_ms" field.
 func (u *UsageLogUpsert) ClearFirstTokenMs() *UsageLogUpsert {
 	u.SetNull(usagelog.FieldFirstTokenMs)
+	return u
+}
+
+// SetServerProcessingMs sets the "server_processing_ms" field.
+func (u *UsageLogUpsert) SetServerProcessingMs(v int) *UsageLogUpsert {
+	u.Set(usagelog.FieldServerProcessingMs, v)
+	return u
+}
+
+// UpdateServerProcessingMs sets the "server_processing_ms" field to the value that was provided on create.
+func (u *UsageLogUpsert) UpdateServerProcessingMs() *UsageLogUpsert {
+	u.SetExcluded(usagelog.FieldServerProcessingMs)
+	return u
+}
+
+// AddServerProcessingMs adds v to the "server_processing_ms" field.
+func (u *UsageLogUpsert) AddServerProcessingMs(v int) *UsageLogUpsert {
+	u.Add(usagelog.FieldServerProcessingMs, v)
+	return u
+}
+
+// ClearServerProcessingMs clears the value of the "server_processing_ms" field.
+func (u *UsageLogUpsert) ClearServerProcessingMs() *UsageLogUpsert {
+	u.SetNull(usagelog.FieldServerProcessingMs)
+	return u
+}
+
+// SetUpstreamTtfbMs sets the "upstream_ttfb_ms" field.
+func (u *UsageLogUpsert) SetUpstreamTtfbMs(v int) *UsageLogUpsert {
+	u.Set(usagelog.FieldUpstreamTtfbMs, v)
+	return u
+}
+
+// UpdateUpstreamTtfbMs sets the "upstream_ttfb_ms" field to the value that was provided on create.
+func (u *UsageLogUpsert) UpdateUpstreamTtfbMs() *UsageLogUpsert {
+	u.SetExcluded(usagelog.FieldUpstreamTtfbMs)
+	return u
+}
+
+// AddUpstreamTtfbMs adds v to the "upstream_ttfb_ms" field.
+func (u *UsageLogUpsert) AddUpstreamTtfbMs(v int) *UsageLogUpsert {
+	u.Add(usagelog.FieldUpstreamTtfbMs, v)
+	return u
+}
+
+// ClearUpstreamTtfbMs clears the value of the "upstream_ttfb_ms" field.
+func (u *UsageLogUpsert) ClearUpstreamTtfbMs() *UsageLogUpsert {
+	u.SetNull(usagelog.FieldUpstreamTtfbMs)
+	return u
+}
+
+// SetUpstreamStreamMs sets the "upstream_stream_ms" field.
+func (u *UsageLogUpsert) SetUpstreamStreamMs(v int) *UsageLogUpsert {
+	u.Set(usagelog.FieldUpstreamStreamMs, v)
+	return u
+}
+
+// UpdateUpstreamStreamMs sets the "upstream_stream_ms" field to the value that was provided on create.
+func (u *UsageLogUpsert) UpdateUpstreamStreamMs() *UsageLogUpsert {
+	u.SetExcluded(usagelog.FieldUpstreamStreamMs)
+	return u
+}
+
+// AddUpstreamStreamMs adds v to the "upstream_stream_ms" field.
+func (u *UsageLogUpsert) AddUpstreamStreamMs(v int) *UsageLogUpsert {
+	u.Add(usagelog.FieldUpstreamStreamMs, v)
+	return u
+}
+
+// ClearUpstreamStreamMs clears the value of the "upstream_stream_ms" field.
+func (u *UsageLogUpsert) ClearUpstreamStreamMs() *UsageLogUpsert {
+	u.SetNull(usagelog.FieldUpstreamStreamMs)
+	return u
+}
+
+// SetResponseDeliveryMs sets the "response_delivery_ms" field.
+func (u *UsageLogUpsert) SetResponseDeliveryMs(v int) *UsageLogUpsert {
+	u.Set(usagelog.FieldResponseDeliveryMs, v)
+	return u
+}
+
+// UpdateResponseDeliveryMs sets the "response_delivery_ms" field to the value that was provided on create.
+func (u *UsageLogUpsert) UpdateResponseDeliveryMs() *UsageLogUpsert {
+	u.SetExcluded(usagelog.FieldResponseDeliveryMs)
+	return u
+}
+
+// AddResponseDeliveryMs adds v to the "response_delivery_ms" field.
+func (u *UsageLogUpsert) AddResponseDeliveryMs(v int) *UsageLogUpsert {
+	u.Add(usagelog.FieldResponseDeliveryMs, v)
+	return u
+}
+
+// ClearResponseDeliveryMs clears the value of the "response_delivery_ms" field.
+func (u *UsageLogUpsert) ClearResponseDeliveryMs() *UsageLogUpsert {
+	u.SetNull(usagelog.FieldResponseDeliveryMs)
+	return u
+}
+
+// SetTotalLatencyMs sets the "total_latency_ms" field.
+func (u *UsageLogUpsert) SetTotalLatencyMs(v int) *UsageLogUpsert {
+	u.Set(usagelog.FieldTotalLatencyMs, v)
+	return u
+}
+
+// UpdateTotalLatencyMs sets the "total_latency_ms" field to the value that was provided on create.
+func (u *UsageLogUpsert) UpdateTotalLatencyMs() *UsageLogUpsert {
+	u.SetExcluded(usagelog.FieldTotalLatencyMs)
+	return u
+}
+
+// AddTotalLatencyMs adds v to the "total_latency_ms" field.
+func (u *UsageLogUpsert) AddTotalLatencyMs(v int) *UsageLogUpsert {
+	u.Add(usagelog.FieldTotalLatencyMs, v)
+	return u
+}
+
+// ClearTotalLatencyMs clears the value of the "total_latency_ms" field.
+func (u *UsageLogUpsert) ClearTotalLatencyMs() *UsageLogUpsert {
+	u.SetNull(usagelog.FieldTotalLatencyMs)
+	return u
+}
+
+// SetAccessType sets the "access_type" field.
+func (u *UsageLogUpsert) SetAccessType(v string) *UsageLogUpsert {
+	u.Set(usagelog.FieldAccessType, v)
+	return u
+}
+
+// UpdateAccessType sets the "access_type" field to the value that was provided on create.
+func (u *UsageLogUpsert) UpdateAccessType() *UsageLogUpsert {
+	u.SetExcluded(usagelog.FieldAccessType)
+	return u
+}
+
+// ClearAccessType clears the value of the "access_type" field.
+func (u *UsageLogUpsert) ClearAccessType() *UsageLogUpsert {
+	u.SetNull(usagelog.FieldAccessType)
+	return u
+}
+
+// SetClientCountry sets the "client_country" field.
+func (u *UsageLogUpsert) SetClientCountry(v string) *UsageLogUpsert {
+	u.Set(usagelog.FieldClientCountry, v)
+	return u
+}
+
+// UpdateClientCountry sets the "client_country" field to the value that was provided on create.
+func (u *UsageLogUpsert) UpdateClientCountry() *UsageLogUpsert {
+	u.SetExcluded(usagelog.FieldClientCountry)
+	return u
+}
+
+// ClearClientCountry clears the value of the "client_country" field.
+func (u *UsageLogUpsert) ClearClientCountry() *UsageLogUpsert {
+	u.SetNull(usagelog.FieldClientCountry)
+	return u
+}
+
+// SetClientRegion sets the "client_region" field.
+func (u *UsageLogUpsert) SetClientRegion(v string) *UsageLogUpsert {
+	u.Set(usagelog.FieldClientRegion, v)
+	return u
+}
+
+// UpdateClientRegion sets the "client_region" field to the value that was provided on create.
+func (u *UsageLogUpsert) UpdateClientRegion() *UsageLogUpsert {
+	u.SetExcluded(usagelog.FieldClientRegion)
+	return u
+}
+
+// ClearClientRegion clears the value of the "client_region" field.
+func (u *UsageLogUpsert) ClearClientRegion() *UsageLogUpsert {
+	u.SetNull(usagelog.FieldClientRegion)
 	return u
 }
 
@@ -2370,6 +2703,209 @@ func (u *UsageLogUpsertOne) UpdateFirstTokenMs() *UsageLogUpsertOne {
 func (u *UsageLogUpsertOne) ClearFirstTokenMs() *UsageLogUpsertOne {
 	return u.Update(func(s *UsageLogUpsert) {
 		s.ClearFirstTokenMs()
+	})
+}
+
+// SetServerProcessingMs sets the "server_processing_ms" field.
+func (u *UsageLogUpsertOne) SetServerProcessingMs(v int) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetServerProcessingMs(v)
+	})
+}
+
+// AddServerProcessingMs adds v to the "server_processing_ms" field.
+func (u *UsageLogUpsertOne) AddServerProcessingMs(v int) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.AddServerProcessingMs(v)
+	})
+}
+
+// UpdateServerProcessingMs sets the "server_processing_ms" field to the value that was provided on create.
+func (u *UsageLogUpsertOne) UpdateServerProcessingMs() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateServerProcessingMs()
+	})
+}
+
+// ClearServerProcessingMs clears the value of the "server_processing_ms" field.
+func (u *UsageLogUpsertOne) ClearServerProcessingMs() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearServerProcessingMs()
+	})
+}
+
+// SetUpstreamTtfbMs sets the "upstream_ttfb_ms" field.
+func (u *UsageLogUpsertOne) SetUpstreamTtfbMs(v int) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetUpstreamTtfbMs(v)
+	})
+}
+
+// AddUpstreamTtfbMs adds v to the "upstream_ttfb_ms" field.
+func (u *UsageLogUpsertOne) AddUpstreamTtfbMs(v int) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.AddUpstreamTtfbMs(v)
+	})
+}
+
+// UpdateUpstreamTtfbMs sets the "upstream_ttfb_ms" field to the value that was provided on create.
+func (u *UsageLogUpsertOne) UpdateUpstreamTtfbMs() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateUpstreamTtfbMs()
+	})
+}
+
+// ClearUpstreamTtfbMs clears the value of the "upstream_ttfb_ms" field.
+func (u *UsageLogUpsertOne) ClearUpstreamTtfbMs() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearUpstreamTtfbMs()
+	})
+}
+
+// SetUpstreamStreamMs sets the "upstream_stream_ms" field.
+func (u *UsageLogUpsertOne) SetUpstreamStreamMs(v int) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetUpstreamStreamMs(v)
+	})
+}
+
+// AddUpstreamStreamMs adds v to the "upstream_stream_ms" field.
+func (u *UsageLogUpsertOne) AddUpstreamStreamMs(v int) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.AddUpstreamStreamMs(v)
+	})
+}
+
+// UpdateUpstreamStreamMs sets the "upstream_stream_ms" field to the value that was provided on create.
+func (u *UsageLogUpsertOne) UpdateUpstreamStreamMs() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateUpstreamStreamMs()
+	})
+}
+
+// ClearUpstreamStreamMs clears the value of the "upstream_stream_ms" field.
+func (u *UsageLogUpsertOne) ClearUpstreamStreamMs() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearUpstreamStreamMs()
+	})
+}
+
+// SetResponseDeliveryMs sets the "response_delivery_ms" field.
+func (u *UsageLogUpsertOne) SetResponseDeliveryMs(v int) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetResponseDeliveryMs(v)
+	})
+}
+
+// AddResponseDeliveryMs adds v to the "response_delivery_ms" field.
+func (u *UsageLogUpsertOne) AddResponseDeliveryMs(v int) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.AddResponseDeliveryMs(v)
+	})
+}
+
+// UpdateResponseDeliveryMs sets the "response_delivery_ms" field to the value that was provided on create.
+func (u *UsageLogUpsertOne) UpdateResponseDeliveryMs() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateResponseDeliveryMs()
+	})
+}
+
+// ClearResponseDeliveryMs clears the value of the "response_delivery_ms" field.
+func (u *UsageLogUpsertOne) ClearResponseDeliveryMs() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearResponseDeliveryMs()
+	})
+}
+
+// SetTotalLatencyMs sets the "total_latency_ms" field.
+func (u *UsageLogUpsertOne) SetTotalLatencyMs(v int) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetTotalLatencyMs(v)
+	})
+}
+
+// AddTotalLatencyMs adds v to the "total_latency_ms" field.
+func (u *UsageLogUpsertOne) AddTotalLatencyMs(v int) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.AddTotalLatencyMs(v)
+	})
+}
+
+// UpdateTotalLatencyMs sets the "total_latency_ms" field to the value that was provided on create.
+func (u *UsageLogUpsertOne) UpdateTotalLatencyMs() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateTotalLatencyMs()
+	})
+}
+
+// ClearTotalLatencyMs clears the value of the "total_latency_ms" field.
+func (u *UsageLogUpsertOne) ClearTotalLatencyMs() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearTotalLatencyMs()
+	})
+}
+
+// SetAccessType sets the "access_type" field.
+func (u *UsageLogUpsertOne) SetAccessType(v string) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetAccessType(v)
+	})
+}
+
+// UpdateAccessType sets the "access_type" field to the value that was provided on create.
+func (u *UsageLogUpsertOne) UpdateAccessType() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateAccessType()
+	})
+}
+
+// ClearAccessType clears the value of the "access_type" field.
+func (u *UsageLogUpsertOne) ClearAccessType() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearAccessType()
+	})
+}
+
+// SetClientCountry sets the "client_country" field.
+func (u *UsageLogUpsertOne) SetClientCountry(v string) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetClientCountry(v)
+	})
+}
+
+// UpdateClientCountry sets the "client_country" field to the value that was provided on create.
+func (u *UsageLogUpsertOne) UpdateClientCountry() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateClientCountry()
+	})
+}
+
+// ClearClientCountry clears the value of the "client_country" field.
+func (u *UsageLogUpsertOne) ClearClientCountry() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearClientCountry()
+	})
+}
+
+// SetClientRegion sets the "client_region" field.
+func (u *UsageLogUpsertOne) SetClientRegion(v string) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetClientRegion(v)
+	})
+}
+
+// UpdateClientRegion sets the "client_region" field to the value that was provided on create.
+func (u *UsageLogUpsertOne) UpdateClientRegion() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateClientRegion()
+	})
+}
+
+// ClearClientRegion clears the value of the "client_region" field.
+func (u *UsageLogUpsertOne) ClearClientRegion() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearClientRegion()
 	})
 }
 
@@ -3316,6 +3852,209 @@ func (u *UsageLogUpsertBulk) UpdateFirstTokenMs() *UsageLogUpsertBulk {
 func (u *UsageLogUpsertBulk) ClearFirstTokenMs() *UsageLogUpsertBulk {
 	return u.Update(func(s *UsageLogUpsert) {
 		s.ClearFirstTokenMs()
+	})
+}
+
+// SetServerProcessingMs sets the "server_processing_ms" field.
+func (u *UsageLogUpsertBulk) SetServerProcessingMs(v int) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetServerProcessingMs(v)
+	})
+}
+
+// AddServerProcessingMs adds v to the "server_processing_ms" field.
+func (u *UsageLogUpsertBulk) AddServerProcessingMs(v int) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.AddServerProcessingMs(v)
+	})
+}
+
+// UpdateServerProcessingMs sets the "server_processing_ms" field to the value that was provided on create.
+func (u *UsageLogUpsertBulk) UpdateServerProcessingMs() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateServerProcessingMs()
+	})
+}
+
+// ClearServerProcessingMs clears the value of the "server_processing_ms" field.
+func (u *UsageLogUpsertBulk) ClearServerProcessingMs() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearServerProcessingMs()
+	})
+}
+
+// SetUpstreamTtfbMs sets the "upstream_ttfb_ms" field.
+func (u *UsageLogUpsertBulk) SetUpstreamTtfbMs(v int) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetUpstreamTtfbMs(v)
+	})
+}
+
+// AddUpstreamTtfbMs adds v to the "upstream_ttfb_ms" field.
+func (u *UsageLogUpsertBulk) AddUpstreamTtfbMs(v int) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.AddUpstreamTtfbMs(v)
+	})
+}
+
+// UpdateUpstreamTtfbMs sets the "upstream_ttfb_ms" field to the value that was provided on create.
+func (u *UsageLogUpsertBulk) UpdateUpstreamTtfbMs() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateUpstreamTtfbMs()
+	})
+}
+
+// ClearUpstreamTtfbMs clears the value of the "upstream_ttfb_ms" field.
+func (u *UsageLogUpsertBulk) ClearUpstreamTtfbMs() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearUpstreamTtfbMs()
+	})
+}
+
+// SetUpstreamStreamMs sets the "upstream_stream_ms" field.
+func (u *UsageLogUpsertBulk) SetUpstreamStreamMs(v int) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetUpstreamStreamMs(v)
+	})
+}
+
+// AddUpstreamStreamMs adds v to the "upstream_stream_ms" field.
+func (u *UsageLogUpsertBulk) AddUpstreamStreamMs(v int) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.AddUpstreamStreamMs(v)
+	})
+}
+
+// UpdateUpstreamStreamMs sets the "upstream_stream_ms" field to the value that was provided on create.
+func (u *UsageLogUpsertBulk) UpdateUpstreamStreamMs() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateUpstreamStreamMs()
+	})
+}
+
+// ClearUpstreamStreamMs clears the value of the "upstream_stream_ms" field.
+func (u *UsageLogUpsertBulk) ClearUpstreamStreamMs() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearUpstreamStreamMs()
+	})
+}
+
+// SetResponseDeliveryMs sets the "response_delivery_ms" field.
+func (u *UsageLogUpsertBulk) SetResponseDeliveryMs(v int) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetResponseDeliveryMs(v)
+	})
+}
+
+// AddResponseDeliveryMs adds v to the "response_delivery_ms" field.
+func (u *UsageLogUpsertBulk) AddResponseDeliveryMs(v int) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.AddResponseDeliveryMs(v)
+	})
+}
+
+// UpdateResponseDeliveryMs sets the "response_delivery_ms" field to the value that was provided on create.
+func (u *UsageLogUpsertBulk) UpdateResponseDeliveryMs() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateResponseDeliveryMs()
+	})
+}
+
+// ClearResponseDeliveryMs clears the value of the "response_delivery_ms" field.
+func (u *UsageLogUpsertBulk) ClearResponseDeliveryMs() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearResponseDeliveryMs()
+	})
+}
+
+// SetTotalLatencyMs sets the "total_latency_ms" field.
+func (u *UsageLogUpsertBulk) SetTotalLatencyMs(v int) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetTotalLatencyMs(v)
+	})
+}
+
+// AddTotalLatencyMs adds v to the "total_latency_ms" field.
+func (u *UsageLogUpsertBulk) AddTotalLatencyMs(v int) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.AddTotalLatencyMs(v)
+	})
+}
+
+// UpdateTotalLatencyMs sets the "total_latency_ms" field to the value that was provided on create.
+func (u *UsageLogUpsertBulk) UpdateTotalLatencyMs() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateTotalLatencyMs()
+	})
+}
+
+// ClearTotalLatencyMs clears the value of the "total_latency_ms" field.
+func (u *UsageLogUpsertBulk) ClearTotalLatencyMs() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearTotalLatencyMs()
+	})
+}
+
+// SetAccessType sets the "access_type" field.
+func (u *UsageLogUpsertBulk) SetAccessType(v string) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetAccessType(v)
+	})
+}
+
+// UpdateAccessType sets the "access_type" field to the value that was provided on create.
+func (u *UsageLogUpsertBulk) UpdateAccessType() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateAccessType()
+	})
+}
+
+// ClearAccessType clears the value of the "access_type" field.
+func (u *UsageLogUpsertBulk) ClearAccessType() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearAccessType()
+	})
+}
+
+// SetClientCountry sets the "client_country" field.
+func (u *UsageLogUpsertBulk) SetClientCountry(v string) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetClientCountry(v)
+	})
+}
+
+// UpdateClientCountry sets the "client_country" field to the value that was provided on create.
+func (u *UsageLogUpsertBulk) UpdateClientCountry() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateClientCountry()
+	})
+}
+
+// ClearClientCountry clears the value of the "client_country" field.
+func (u *UsageLogUpsertBulk) ClearClientCountry() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearClientCountry()
+	})
+}
+
+// SetClientRegion sets the "client_region" field.
+func (u *UsageLogUpsertBulk) SetClientRegion(v string) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetClientRegion(v)
+	})
+}
+
+// UpdateClientRegion sets the "client_region" field to the value that was provided on create.
+func (u *UsageLogUpsertBulk) UpdateClientRegion() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateClientRegion()
+	})
+}
+
+// ClearClientRegion clears the value of the "client_region" field.
+func (u *UsageLogUpsertBulk) ClearClientRegion() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearClientRegion()
 	})
 }
 

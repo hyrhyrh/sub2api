@@ -8017,6 +8017,7 @@ type RecordUsageInput struct {
 	APIKeyService      APIKeyQuotaUpdater // 可选：用于更新API Key配额
 
 	ChannelUsageFields // 渠道映射信息（由 handler 在 Forward 前解析）
+	LatencyUsageFields // 延迟分解（由 handler 从 LatencyTracker + GeoIP 解析）
 }
 
 // APIKeyQuotaUpdater defines the interface for updating API Key quota and rate limit usage
@@ -8430,6 +8431,7 @@ func (s *GatewayService) RecordUsage(ctx context.Context, input *RecordUsageInpu
 		ForceCacheBilling:  input.ForceCacheBilling,
 		APIKeyService:      input.APIKeyService,
 		ChannelUsageFields: input.ChannelUsageFields,
+		LatencyUsageFields: input.LatencyUsageFields,
 	}, &recordUsageOpts{
 		EnableClaudePath: true,
 	})
@@ -8453,6 +8455,7 @@ type RecordUsageLongContextInput struct {
 	APIKeyService         APIKeyQuotaUpdater // API Key 配额服务（可选）
 
 	ChannelUsageFields // 渠道映射信息（由 handler 在 Forward 前解析）
+	LatencyUsageFields
 }
 
 // RecordUsageWithLongContext 记录使用量并扣费，支持长上下文双倍计费（用于 Gemini）
@@ -8471,6 +8474,7 @@ func (s *GatewayService) RecordUsageWithLongContext(ctx context.Context, input *
 		ForceCacheBilling:  input.ForceCacheBilling,
 		APIKeyService:      input.APIKeyService,
 		ChannelUsageFields: input.ChannelUsageFields,
+		LatencyUsageFields: input.LatencyUsageFields,
 	}, &recordUsageOpts{
 		LongContextThreshold:  input.LongContextThreshold,
 		LongContextMultiplier: input.LongContextMultiplier,
@@ -8492,6 +8496,7 @@ type recordUsageCoreInput struct {
 	ForceCacheBilling  bool
 	APIKeyService      APIKeyQuotaUpdater
 	ChannelUsageFields
+	LatencyUsageFields
 }
 
 // recordUsageCore 是 RecordUsage 和 RecordUsageWithLongContext 的统一实现。
@@ -8819,6 +8824,14 @@ func (s *GatewayService) buildRecordUsageLog(
 		IPAddress:             optionalTrimmedStringPtr(input.IPAddress),
 		GroupID:               apiKey.GroupID,
 		SubscriptionID:        optionalSubscriptionID(subscription),
+		ServerProcessingMs:    input.ServerProcessingMs,
+		UpstreamTTFBMs:        input.UpstreamTTFBMs,
+		UpstreamStreamMs:      input.UpstreamStreamMs,
+		ResponseDeliveryMs:    input.ResponseDeliveryMs,
+		TotalLatencyMs:        input.TotalLatencyMs,
+		AccessType:            optionalTrimmedStringPtr(input.AccessType),
+		ClientCountry:         optionalTrimmedStringPtr(input.ClientCountry),
+		ClientRegion:          optionalTrimmedStringPtr(input.ClientRegion),
 		CreatedAt:             time.Now(),
 	}
 	if result.ImageCount > 0 {

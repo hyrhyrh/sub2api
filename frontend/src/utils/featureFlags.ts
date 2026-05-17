@@ -119,6 +119,11 @@ export const FeatureFlags = {
     mode: 'opt-in',
     label: 'Affiliate',
   }),
+  speedtestPublic: defineFlag({
+    key: 'speedtest_public_enabled',
+    mode: 'opt-in',
+    label: 'Speedtest Public',
+  }),
 } as const
 
 export type RegisteredFeatureFlag = keyof typeof FeatureFlags

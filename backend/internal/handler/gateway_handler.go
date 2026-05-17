@@ -52,6 +52,7 @@ type GatewayHandler struct {
 	maxAccountSwitchesGemini  int
 	cfg                       *config.Config
 	settingService            *service.SettingService
+	geoIPService              *service.GeoIPService
 }
 
 // NewGatewayHandler creates a new GatewayHandler
@@ -70,6 +71,7 @@ func NewGatewayHandler(
 	userMsgQueueService *service.UserMessageQueueService,
 	cfg *config.Config,
 	settingService *service.SettingService,
+	geoIPService *service.GeoIPService,
 ) *GatewayHandler {
 	pingInterval := time.Duration(0)
 	maxAccountSwitches := 10
@@ -107,6 +109,7 @@ func NewGatewayHandler(
 		maxAccountSwitchesGemini:  maxAccountSwitchesGemini,
 		cfg:                       cfg,
 		settingService:            settingService,
+		geoIPService:              geoIPService,
 	}
 }
 
@@ -436,10 +439,16 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 			}
 			// 记录 Forward 前已写入字节数，Forward 后若增加则说明 SSE 内容已发，禁止 failover
 			writerSizeBeforeForward := c.Writer.Size()
+			latencyTracker := middleware2.GetLatencyTracker(c)
+			latencyTracker.MarkUpstreamSent()
 			if account.Platform == service.PlatformAntigravity {
 				result, err = h.antigravityGatewayService.ForwardGemini(requestCtx, c, account, reqModel, "generateContent", reqStream, body, hasBoundSession)
 			} else {
 				result, err = h.geminiCompatService.Forward(requestCtx, c, account, body)
+			}
+			latencyTracker.MarkUpstreamCompleted()
+			if result != nil && result.FirstTokenMs != nil {
+				latencyTracker.SetUpstreamTTFBMs(*result.FirstTokenMs)
 			}
 			if accountReleaseFunc != nil {
 				accountReleaseFunc()
@@ -505,6 +514,8 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 				result.ReasoningEffort = service.NormalizeClaudeOutputEffort(parsedReq.OutputEffort)
 			}
 
+			latencyFields := CollectLatencyUsageFields(c, h.geoIPService, clientIP)
+
 			// 使用量记录通过有界 worker 池提交，避免请求热路径创建无界 goroutine。
 			h.submitUsageRecordTask(func(ctx context.Context) {
 				if err := h.gatewayService.RecordUsage(ctx, &service.RecordUsageInput{
@@ -522,6 +533,7 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 					ForceCacheBilling:  fs.ForceCacheBilling,
 					APIKeyService:      h.apiKeyService,
 					ChannelUsageFields: channelMapping.ToUsageFields(reqModel, result.UpstreamModel),
+					LatencyUsageFields: latencyFields,
 				}); err != nil {
 					logger.L().With(
 						zap.String("component", "handler.gateway.messages"),
@@ -752,10 +764,16 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 			}
 			// 记录 Forward 前已写入字节数，Forward 后若增加则说明 SSE 内容已发，禁止 failover
 			writerSizeBeforeForward := c.Writer.Size()
+			latencyTracker := middleware2.GetLatencyTracker(c)
+			latencyTracker.MarkUpstreamSent()
 			if account.Platform == service.PlatformAntigravity && account.Type != service.AccountTypeAPIKey {
 				result, err = h.antigravityGatewayService.Forward(requestCtx, c, account, body, hasBoundSession)
 			} else {
 				result, err = h.gatewayService.Forward(requestCtx, c, account, parsedReq)
+			}
+			latencyTracker.MarkUpstreamCompleted()
+			if result != nil && result.FirstTokenMs != nil {
+				latencyTracker.SetUpstreamTTFBMs(*result.FirstTokenMs)
 			}
 
 			// 兜底释放串行锁（正常情况已通过回调提前释放）
@@ -893,6 +911,8 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 				result.ReasoningEffort = service.NormalizeClaudeOutputEffort(parsedReq.OutputEffort)
 			}
 
+			latencyFields := CollectLatencyUsageFields(c, h.geoIPService, clientIP)
+
 			// 使用量记录通过有界 worker 池提交，避免请求热路径创建无界 goroutine。
 			h.submitUsageRecordTask(func(ctx context.Context) {
 				if err := h.gatewayService.RecordUsage(ctx, &service.RecordUsageInput{
@@ -910,6 +930,7 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 					ForceCacheBilling:  fs.ForceCacheBilling,
 					APIKeyService:      h.apiKeyService,
 					ChannelUsageFields: channelMapping.ToUsageFields(reqModel, result.UpstreamModel),
+					LatencyUsageFields: latencyFields,
 				}); err != nil {
 					logger.L().With(
 						zap.String("component", "handler.gateway.messages"),
@@ -1851,6 +1872,36 @@ func (h *GatewayHandler) submitUsageRecordTask(task service.UsageRecordTask) {
 		}
 	}()
 	task(ctx)
+}
+
+// CollectLatencyUsageFields 从 gin.Context 上的 LatencyTracker 提取 5 段延迟，
+// 并通过 GeoIP 解析 client_country / client_region。
+//
+// 包级函数（不绑定 GatewayHandler），让 OpenAIGatewayHandler 等同包内 handler
+// 也能直接调用，无需重复实现。geoIPSvc 为 nil 时跳过地理解析。
+//
+// clientIP 应与 RecordUsageInput.IPAddress 同源（统一走 ip.GetClientIP(c)）。
+func CollectLatencyUsageFields(c *gin.Context, geoIPSvc *service.GeoIPService, clientIP string) service.LatencyUsageFields {
+	out := service.LatencyUsageFields{}
+	if tracker := middleware2.GetLatencyTracker(c); tracker != nil {
+		// 主动 Mark T5：RecordUsage 在 c.Next() 之内调用，此时中间件还未填 T5，
+		// 不主动 mark 会导致 total_latency_ms / response_delivery_ms 始终为 NULL。
+		// 幂等，与中间件最终 mark 相比误差仅几微秒。
+		tracker.MarkResponseCompleted()
+		m := tracker.DerivedMetrics()
+		out.ServerProcessingMs = m.ServerProcessingMs
+		out.UpstreamTTFBMs = m.UpstreamTTFBMs
+		out.UpstreamStreamMs = m.UpstreamStreamMs
+		out.ResponseDeliveryMs = m.ResponseDeliveryMs
+		out.TotalLatencyMs = m.TotalLatencyMs
+		out.AccessType = tracker.AccessType
+	}
+	if geoIPSvc != nil && clientIP != "" {
+		geo := geoIPSvc.Lookup(clientIP)
+		out.ClientCountry = geo.Country
+		out.ClientRegion = geo.Region
+	}
+	return out
 }
 
 // getUserMsgQueueMode 获取当前请求的 UMQ 模式
