@@ -77,7 +77,27 @@ const (
 	kiroRPMPerAccountDefault = 30
 	kiroRPMWindowSecEnv      = "KIRO_RPM_WINDOW_SEC"
 	kiroRPMWindowSecDefault  = 60
+
+	// KIRO_SERVICE_RETRY_MAX: service 层 429 内 failover 最大重试次数。
+	// 当 executeKiroUpstream 返回 429 时,在 service 内部 SelectAccountForModelWithExclusions
+	// 切到下一账号重试,避免依赖 handler 层重启整个 forward 流程的延迟。
+	// 默认 3 次:够覆盖单次请求碰到 2-3 个限流账号的常见情况;过大会让 client 等待过久,
+	// 也容易在小池子上耗尽。仅适用于 kiro 平台(其他平台 handler 层 failover 已足够)。
+	kiroServiceRetryMaxEnv     = "KIRO_SERVICE_RETRY_MAX"
+	kiroServiceRetryMaxDefault = 3
 )
+
+// kiroServiceRetryMax 从 env 读取 service 层 failover 重试次数。<0 回退默认 3,=0 关闭。
+func kiroServiceRetryMax() int {
+	raw := strings.TrimSpace(os.Getenv(kiroServiceRetryMaxEnv))
+	if raw == "" {
+		return kiroServiceRetryMaxDefault
+	}
+	if v, err := strconv.Atoi(raw); err == nil && v >= 0 {
+		return v
+	}
+	return kiroServiceRetryMaxDefault
+}
 
 // kiroRPMPerAccount 从 env 读取 Kiro 每账号 RPM 上限。<=0 表示不限制(只计数,不拒绝)。
 // 非数字 / 缺失值回退默认 30。

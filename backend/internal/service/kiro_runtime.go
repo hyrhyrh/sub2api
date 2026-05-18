@@ -83,7 +83,7 @@ func (s *GatewayService) forwardKiroMessages(ctx context.Context, c *gin.Context
 	}
 
 	if parsed.Stream {
-		resp, _, err := s.openKiroAnthropicStreamResponse(ctx, account, body, mappedModel, originalModel, c.Request.Header, parsed.Group)
+		resp, _, err := s.openKiroAnthropicStreamResponse(ctx, account, parsed, body, mappedModel, originalModel, c.Request.Header, parsed.Group)
 		if err != nil {
 			var failoverErr *UpstreamFailoverError
 			if errors.As(err, &failoverErr) {
@@ -196,7 +196,12 @@ func (s *GatewayService) forwardKiroMessages(ctx context.Context, c *gin.Context
 	}
 
 	inputTokens := estimateKiroInputTokens(body)
-	resp, requestCtx, err := s.executeKiroUpstream(ctx, account, body, mappedModel, originalModel, token, c.Request.Header)
+	// P0 #3: service 层 429 内 failover —— wrapper 内部最多重试 KIRO_SERVICE_RETRY_MAX 次,
+	// 每次切到新账号都会重新 GetAccessToken。返回的 effectiveAccount 可能与传入的 account 不同。
+	effectiveAccount, resp, requestCtx, err := s.executeKiroUpstreamWithServiceFailover(ctx, account, parsed, body, mappedModel, originalModel, token, c.Request.Header)
+	if effectiveAccount != nil {
+		account = effectiveAccount
+	}
 	if err != nil {
 		var failoverErr *UpstreamFailoverError
 		if errors.As(err, &failoverErr) {
@@ -257,7 +262,11 @@ func (s *GatewayService) forwardKiroMessages(ctx context.Context, c *gin.Context
 	}, nil
 }
 
-func (s *GatewayService) openKiroAnthropicStreamResponse(ctx context.Context, account *Account, anthropicBody []byte, mappedModel, requestModel string, headers http.Header, group *Group) (*http.Response, int, error) {
+// openKiroAnthropicStreamResponse 打开 Kiro upstream 的流式响应。
+// 注意:parsed 用于 P0 #3 service 层 429 内 failover 时调用 SelectAccountForModelWithExclusions;
+// parsed=nil 时退化为不切号(只针对当前 account 发起请求,完全兼容旧调用方)。
+// group 字段仍保留为入参,在 P0 改动前由调用方独立计算,这里继续从 parsed 取或用入参兜底。
+func (s *GatewayService) openKiroAnthropicStreamResponse(ctx context.Context, account *Account, parsed *ParsedRequest, anthropicBody []byte, mappedModel, requestModel string, headers http.Header, group *Group) (*http.Response, int, error) {
 	token, tokenType, err := s.GetAccessToken(ctx, account)
 	if err != nil {
 		return nil, 0, err
@@ -287,7 +296,12 @@ func (s *GatewayService) openKiroAnthropicStreamResponse(ctx context.Context, ac
 		}, inputTokens, nil
 	}
 
-	resp, requestCtx, err := s.executeKiroUpstream(ctx, account, anthropicBody, mappedModel, requestModel, token, headers)
+	// P0 #3: service 层 429 内 failover —— wrapper 内部最多 KIRO_SERVICE_RETRY_MAX 次切号 retry。
+	// 流式分支同样适用:此处尚未开始向客户端写 SSE,切号是安全的(切完后才开始 stream)。
+	effectiveAccount, resp, requestCtx, err := s.executeKiroUpstreamWithServiceFailover(ctx, account, parsed, anthropicBody, mappedModel, requestModel, token, headers)
+	if effectiveAccount != nil {
+		account = effectiveAccount
+	}
 	if err != nil {
 		var failoverErr *UpstreamFailoverError
 		if errors.As(err, &failoverErr) {
@@ -323,6 +337,76 @@ func (s *GatewayService) openKiroAnthropicStreamResponse(ctx context.Context, ac
 		Header:     wrappedHeaders,
 		Body:       pr,
 	}, inputTokens, nil
+}
+
+// executeKiroUpstreamWithServiceFailover 在 executeKiroUpstream 基础上叠加 service 层 429
+// 内 failover。当原 executeKiroUpstream 返回 UpstreamFailoverError(429) 时,
+// 函数在 service 内部调 SelectAccountForModelWithExclusions 选下一个账号、重取 token、
+// 重建 payload 再发,最多 KIRO_SERVICE_RETRY_MAX 次。
+//
+// 与 handler 层 failover 相比的优势:
+//   - 不需要走完整个 forwardKiroMessages 重启,延迟更低。
+//   - handler 层 MaxSwitches 是全局额度;service 层切号不消耗它,留给真正
+//     不同类型错误(401/403/5xx)使用。
+//
+// 切号时的副作用:
+//   - 上一账号已经在 executeKiroUpstream 内做了 markKiro429 + RPM 已被 Increment
+//     (前者由原函数完成,后者也是),都视为占用消耗,不回退。
+//   - 新账号若也 429,继续 retry 直到 maxRetry 耗尽,最后透出最后一次 429 给 handler。
+//
+// excludedIDs 包含已经撞过 429 的账号 + caller 传入的初始 excludedIDs(用于跨次
+// request failover);第一次调用时只含 initialAccount.ID。
+//
+// 当 parsed=nil 或 parsed.GroupID=nil 时退化为单次调用(不切号),保证不破坏
+// 现有 web search / 测试等无 parsed 信息的调用路径。
+func (s *GatewayService) executeKiroUpstreamWithServiceFailover(
+	ctx context.Context,
+	initialAccount *Account,
+	parsed *ParsedRequest,
+	anthropicBody []byte,
+	mappedModel, requestModel, initialToken string,
+	headers http.Header,
+) (*Account, *http.Response, kiropkg.KiroRequestContext, error) {
+	currentAccount := initialAccount
+	currentToken := initialToken
+	maxRetry := kiroServiceRetryMax()
+	// 单次调用时(maxRetry=0 或 parsed 信息不足)直接退化为 executeKiroUpstream。
+	canFailover := maxRetry > 0 && parsed != nil && parsed.GroupID != nil && initialAccount != nil
+
+	excluded := map[int64]struct{}{}
+	if initialAccount != nil {
+		excluded[initialAccount.ID] = struct{}{}
+	}
+
+	for attempt := 0; ; attempt++ {
+		resp, requestCtx, err := s.executeKiroUpstream(ctx, currentAccount, anthropicBody, mappedModel, requestModel, currentToken, headers)
+		// 仅当返回的是 service 内部识别的 UpstreamFailoverError(429) 时才考虑切号。
+		// executeKiroUpstream 返回 resp.StatusCode=429 + nil err 的兜底分支(endpoint 用完)
+		// 也算 429,但此时 resp.Body 已被读取/封装,处理更复杂——暂不在 service 层做切号,
+		// 让 handler 层去走整个 failover,保持现有兜底行为不破。
+		if err != nil {
+			var failoverErr *UpstreamFailoverError
+			if canFailover && errors.As(err, &failoverErr) && failoverErr.StatusCode == http.StatusTooManyRequests && attempt < maxRetry {
+				next, selectErr := s.SelectAccountForModelWithExclusions(ctx, parsed.GroupID, "" /*sessionHash 不复用*/, requestModel, excluded)
+				if selectErr != nil || next == nil {
+					return currentAccount, resp, requestCtx, err
+				}
+				// 重选号后重新取 token 并继续 retry。
+				nextToken, nextTokenType, tokenErr := s.GetAccessToken(ctx, next)
+				if tokenErr != nil || nextTokenType != "oauth" {
+					// 取 token 失败,把当前账号加入 excluded 让后续 retry 继续,
+					// 但本次不消耗 attempt(避免 token 抖动消耗 retry quota)。
+					excluded[next.ID] = struct{}{}
+					continue
+				}
+				excluded[next.ID] = struct{}{}
+				currentAccount = next
+				currentToken = nextToken
+				continue
+			}
+		}
+		return currentAccount, resp, requestCtx, err
+	}
 }
 
 func (s *GatewayService) executeKiroUpstream(ctx context.Context, account *Account, anthropicBody []byte, mappedModel, requestModel, token string, headers http.Header) (*http.Response, kiropkg.KiroRequestContext, error) {
