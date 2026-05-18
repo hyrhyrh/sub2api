@@ -73,9 +73,12 @@ const (
 	// 设计动机：当前 isAccountSchedulableForRPM 对 Anthropic 之外的平台(包括 Kiro)
 	// 直接放行，完全没有 proactive 限流。Kiro 撞 429 后才被动反应，流量集中放大问题。
 	// 这里加一道事前节流：每账号每窗口超过 maxRPM 就跳过(进 NotSchedulable 候选)。
-	// 默认 30/60s 是参考社区经验保守起步；后续按实际后台数据调整。
+	//
+	// 默认 8/60s = 起步保守值。Kiro 官方不公开 RPM；社区调研显示真实瓶颈是 burst throttle
+	// + 月度 credit，稳态 RPM 大约 10-15。先用 8 起步避免误伤；稳定 1-2 周后可调至 12-15。
+	// 调高的判断依据：journalctl 中"KIRO_RPM_PER_ACCOUNT exceeded"日志频次 >> 上游真实 429 频次。
 	kiroRPMPerAccountEnv     = "KIRO_RPM_PER_ACCOUNT"
-	kiroRPMPerAccountDefault = 30
+	kiroRPMPerAccountDefault = 8
 	kiroRPMWindowSecEnv      = "KIRO_RPM_WINDOW_SEC"
 	kiroRPMWindowSecDefault  = 60
 
