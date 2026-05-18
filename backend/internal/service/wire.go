@@ -10,6 +10,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/payment"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/antigravity"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/kirocooldown"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/kirorpm"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/google/wire"
 	"github.com/redis/go-redis/v9"
@@ -146,6 +147,12 @@ func ProvideKiroTokenProvider(
 
 func ProvideKiroCooldownStore(redisClient *redis.Client) KiroCooldownStore {
 	return kirocooldown.NewStore(redisClient)
+}
+
+// ProvideKiroRPMStore 构造 Kiro 平台 RPM 滑动窗口限流 store。
+// 窗口长度从 env KIRO_RPM_WINDOW_SEC 读取(默认 60)。
+func ProvideKiroRPMStore(redisClient *redis.Client) *kirorpm.Store {
+	return kirorpm.NewStore(redisClient, kiroRPMWindowSec())
 }
 
 // ProvideDashboardAggregationService 创建并启动仪表盘聚合服务
@@ -481,6 +488,7 @@ var ProviderSet = wire.NewSet(
 	ProvideGeminiTokenProvider,
 	ProvideKiroTokenProvider,
 	ProvideKiroCooldownStore,
+	ProvideKiroRPMStore,
 	NewGeminiMessagesCompatService,
 	ProvideAntigravityTokenProvider,
 	ProvideOpenAITokenProvider,

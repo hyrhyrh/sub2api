@@ -334,6 +334,19 @@ func (s *GatewayService) executeKiroUpstream(ctx context.Context, account *Accou
 		return nil, requestCtx, err
 	}
 
+	// P0 #2: Kiro 账号级 RPM 滑动窗口的原子检查 + 预递增。
+	// 选号阶段已用只读 Get 做过初筛,这里做权威检查;返回 false 表示窗口名额耗尽,
+	// 立即返回 UpstreamFailoverError(429) 让 handler 层切到下一个账号。
+	// 没有递增计数 → 不需要 Decrement。
+	if account != nil && account.Platform == PlatformKiro && account.Type == AccountTypeOAuth {
+		if !s.TryIncrementKiroRPM(ctx, account.ID) {
+			return nil, requestCtx, &UpstreamFailoverError{
+				StatusCode:   http.StatusTooManyRequests,
+				ResponseBody: []byte("kiro account rpm limit reached, please try again later"),
+			}
+		}
+	}
+
 	modelID := kiropkg.MapModel(mappedModel)
 	currentToken := token
 	buildResult, err := buildKiroPayloadForAccountWithRepo(ctx, s.accountRepo, account, anthropicBody, modelID, currentToken, requestModel, headers)

@@ -28,6 +28,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/pkg/claude"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/kirocooldown"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/kirorpm"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/usagestats"
 	"github.com/Wei-Shaw/sub2api/internal/util/responseheaders"
@@ -66,7 +67,42 @@ const (
 	// 取 8 已足够打散；过大会让一些不太合适的账号也被选中。
 	kiroSelectTopNEnv     = "KIRO_SELECT_TOP_N"
 	kiroSelectTopNDefault = 8
+
+	// KIRO_RPM_PER_ACCOUNT / KIRO_RPM_WINDOW_SEC: Kiro 账号 RPM 滑动窗口配置。
+	// 设计动机：当前 isAccountSchedulableForRPM 对 Anthropic 之外的平台(包括 Kiro)
+	// 直接放行，完全没有 proactive 限流。Kiro 撞 429 后才被动反应，流量集中放大问题。
+	// 这里加一道事前节流：每账号每窗口超过 maxRPM 就跳过(进 NotSchedulable 候选)。
+	// 默认 30/60s 是参考社区经验保守起步；后续按实际后台数据调整。
+	kiroRPMPerAccountEnv     = "KIRO_RPM_PER_ACCOUNT"
+	kiroRPMPerAccountDefault = 30
+	kiroRPMWindowSecEnv      = "KIRO_RPM_WINDOW_SEC"
+	kiroRPMWindowSecDefault  = 60
 )
+
+// kiroRPMPerAccount 从 env 读取 Kiro 每账号 RPM 上限。<=0 表示不限制(只计数,不拒绝)。
+// 非数字 / 缺失值回退默认 30。
+func kiroRPMPerAccount() int {
+	raw := strings.TrimSpace(os.Getenv(kiroRPMPerAccountEnv))
+	if raw == "" {
+		return kiroRPMPerAccountDefault
+	}
+	if v, err := strconv.Atoi(raw); err == nil {
+		return v
+	}
+	return kiroRPMPerAccountDefault
+}
+
+// kiroRPMWindowSec 从 env 读取 Kiro RPM 窗口秒数。<=0 回退默认 60。
+func kiroRPMWindowSec() int {
+	raw := strings.TrimSpace(os.Getenv(kiroRPMWindowSecEnv))
+	if raw == "" {
+		return kiroRPMWindowSecDefault
+	}
+	if v, err := strconv.Atoi(raw); err == nil && v > 0 {
+		return v
+	}
+	return kiroRPMWindowSecDefault
+}
 
 const (
 	claudeMimicDebugInfoKey = "claude_mimic_debug_info"
@@ -568,6 +604,7 @@ type GatewayService struct {
 	claudeTokenProvider   *ClaudeTokenProvider
 	kiroTokenProvider     *KiroTokenProvider
 	kiroCooldownStore     KiroCooldownStore
+	kiroRPMStore          *kirorpm.Store    // Kiro 平台账号级 RPM 滑动窗口；nil 时跳过
 	sessionLimitCache     SessionLimitCache // 会话数量限制缓存（仅 Anthropic OAuth/SetupToken）
 	rpmCache              RPMCache          // RPM 计数缓存（仅 Anthropic OAuth/SetupToken）
 	userGroupRateResolver *userGroupRateResolver
@@ -608,6 +645,7 @@ func NewGatewayService(
 	claudeTokenProvider *ClaudeTokenProvider,
 	kiroTokenProvider *KiroTokenProvider,
 	kiroCooldownStore KiroCooldownStore,
+	kiroRPMStore *kirorpm.Store,
 	sessionLimitCache SessionLimitCache,
 	rpmCache RPMCache,
 	digestStore *DigestSessionStore,
@@ -642,6 +680,7 @@ func NewGatewayService(
 		claudeTokenProvider:  claudeTokenProvider,
 		kiroTokenProvider:    kiroTokenProvider,
 		kiroCooldownStore:    kiroCooldownStore,
+		kiroRPMStore:         kiroRPMStore,
 		sessionLimitCache:    sessionLimitCache,
 		rpmCache:             rpmCache,
 		userGroupRateCache:   gocache.New(userGroupRateTTL, time.Minute),
@@ -2391,6 +2430,65 @@ func (s *GatewayService) isAccountSchedulableForModelSelection(ctx context.Conte
 	return s.isKiroRuntimeSchedulable(ctx, account)
 }
 
+// isKiroAccountSchedulableForRPM 检查 Kiro 账号当前窗口是否未达 RPM 上限。
+//
+// 重要:这是调度阶段的"只读"检查,只 Get 不 Increment。
+// 真正的原子检查 + 递增由 kiro_runtime 在发起请求前调 TryIncrementKiroRPM 完成。
+// 不这样做会导致选号扫描 N 个候选时把这些账号 RPM 全部 +1,造成计数严重高估。
+//
+// 行为:
+//   - kiroRPMStore 未注入 / maxRPM <= 0:放行。
+//   - isSticky=true:粘性会话保证连续性,不做 RPM 节流。
+//   - Get 失败:fail-open 放行。
+//   - current >= maxRPM:不可调度(跳过该账号)。
+//
+// 已知 TOCTOU:调度时读到 current=29,等真正发起时已是 30。TryIncrementKiroRPM
+// 会再做一次原子检查,真正放出去的请求不会超额。
+func (s *GatewayService) isKiroAccountSchedulableForRPM(ctx context.Context, account *Account, isSticky bool) bool {
+	if s == nil || s.kiroRPMStore == nil || account == nil {
+		return true
+	}
+	if isSticky {
+		// 粘性会话保留连续性,跳过节流。
+		return true
+	}
+	maxRPM := kiroRPMPerAccount()
+	if maxRPM <= 0 {
+		return true
+	}
+	current, err := s.kiroRPMStore.Get(ctx, account.ID)
+	if err != nil {
+		return true // fail-open
+	}
+	return current < maxRPM
+}
+
+// TryIncrementKiroRPM 在 kiro_runtime 真正发起 upstream 请求前调用,
+// 原子检查 RPM 上限并递增。返回 true 表示放行(已递增),false 表示已达上限。
+// Redis 不可用时 fail-open 返回 true,不阻断主链路。
+//
+// maxRPM <= 0 时跳过检查,直接返回 true(同时计数 +1,便于运维观察)。
+func (s *GatewayService) TryIncrementKiroRPM(ctx context.Context, accountID int64) bool {
+	if s == nil || s.kiroRPMStore == nil {
+		return true
+	}
+	maxRPM := kiroRPMPerAccount()
+	allowed, err := s.kiroRPMStore.Check(ctx, accountID, maxRPM)
+	if err != nil {
+		return true
+	}
+	return allowed
+}
+
+// DecrementKiroRPM 回退 RPM 计数(例如 service 层 failover 切到下一账号 / 请求失败时撤销预递增)。
+// 失败 fail-open,不影响主链路。
+func (s *GatewayService) DecrementKiroRPM(ctx context.Context, accountID int64) {
+	if s == nil || s.kiroRPMStore == nil {
+		return
+	}
+	s.kiroRPMStore.Decrement(ctx, accountID)
+}
+
 func (s *GatewayService) isKiroRuntimeSchedulable(ctx context.Context, account *Account) bool {
 	if account == nil || account.Platform != PlatformKiro || account.Type != AccountTypeOAuth || s == nil || s.kiroCooldownStore == nil {
 		return true
@@ -2716,9 +2814,23 @@ func (s *GatewayService) withRPMPrefetch(ctx context.Context, accounts []Account
 	return context.WithValue(ctx, rpmPrefetchContextKey, counts)
 }
 
-// isAccountSchedulableForRPM 检查账号是否可根据 RPM 进行调度
-// 仅适用于 Anthropic OAuth/SetupToken 账号
+// isAccountSchedulableForRPM 检查账号是否可根据 RPM 进行调度。
+//
+// 路径分流：
+//   - Kiro OAuth 账号：走 kiroRPMStore 的滑动窗口(KIRO_RPM_PER_ACCOUNT/WINDOW_SEC),
+//     是新增的事前节流路径,避免 Kiro 完全没有 proactive RPM 限流。
+//   - Anthropic OAuth / SetupToken 账号：保留原有 rpmCache + GetBaseRPM 逻辑。
+//   - 其他平台：直接放行(由各平台自己的 RPM/RateLimit 机制处理)。
+//
+// 注意:isSticky=true 时即便超 RPM 也不应拒绝粘性会话(保持会话连续性)。
+// 这与 Anthropic 路径的 StickyOnly 语义一致。
 func (s *GatewayService) isAccountSchedulableForRPM(ctx context.Context, account *Account, isSticky bool) bool {
+	if account == nil {
+		return true
+	}
+	if account.Platform == PlatformKiro && account.Type == AccountTypeOAuth {
+		return s.isKiroAccountSchedulableForRPM(ctx, account, isSticky)
+	}
 	if !account.IsAnthropicOAuthOrSetupToken() {
 		return true
 	}

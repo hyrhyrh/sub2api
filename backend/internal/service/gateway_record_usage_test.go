@@ -38,6 +38,7 @@ func newGatewayRecordUsageServiceForTest(usageRepo UsageLogRepository, userRepo 
 		nil,
 		nil,
 		nil,
+		nil, // kiroRPMStore: P0 #2 新增
 		nil,
 		nil,
 		nil,

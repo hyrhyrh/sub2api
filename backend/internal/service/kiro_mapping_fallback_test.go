@@ -42,6 +42,7 @@ func TestGatewayServiceCalculateTokenCost_KiroAutoUsesConservativeFallback(t *te
 		nil,
 		nil,
 		nil,
+		nil, // kiroRPMStore: P0 #2 新增,nil 时跳过 RPM 检查
 		nil,
 		nil,
 		nil,
