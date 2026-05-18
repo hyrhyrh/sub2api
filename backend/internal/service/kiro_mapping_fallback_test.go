@@ -43,6 +43,7 @@ func TestGatewayServiceCalculateTokenCost_KiroAutoUsesConservativeFallback(t *te
 		nil,
 		nil,
 		nil, // kiroRPMStore: P0 #2 新增,nil 时跳过 RPM 检查
+		nil, // kiroFamilyCooldown: P1 #5 新增,nil 时退化为账号级
 		nil,
 		nil,
 		nil,

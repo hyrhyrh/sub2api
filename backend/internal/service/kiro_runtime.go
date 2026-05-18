@@ -466,19 +466,27 @@ func (s *GatewayService) executeKiroUpstream(ctx context.Context, account *Accou
 			}
 
 			if resp.StatusCode == http.StatusTooManyRequests {
-				cooldown, err := s.markKiro429(ctx, accountKey)
+				// P1 #5+#8: 同时 mark 账号级 + (account, model family) 级冷却,
+				// family 时长优先用上游 Retry-After,缺失则用 KIRO_FAMILY_COOLDOWN_DEFAULT_S。
+				// 先读 body(用于 Retry-After body fallback 和后续 resp 返回),
+				// 再 mark,最后用 resetHTTPResponseBody 还原 body 给调用方。
+				respBody, readErr := io.ReadAll(resp.Body)
+				_ = resp.Body.Close()
+				if readErr != nil {
+					return nil, requestCtx, readErr
+				}
+				cooldown, err := s.markKiro429WithFamily(ctx, account, accountKey, mappedModel, resp.Header, respBody)
 				if err != nil {
-					_ = resp.Body.Close()
 					return nil, requestCtx, err
 				}
 				if idx+1 < len(endpoints) {
-					_ = resp.Body.Close()
 					if sleepErr := sleepKiroRetry(ctx, attempt); sleepErr != nil {
 						return nil, requestCtx, sleepErr
 					}
 					break
 				}
 				resp.Header.Set("x-kiro-cooldown", cooldown.String())
+				resetHTTPResponseBody(resp, respBody)
 				return resp, requestCtx, nil
 			}
 

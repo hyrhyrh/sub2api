@@ -28,6 +28,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/pkg/claude"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/kirocooldown"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/kirofamily"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/kirorpm"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/usagestats"
@@ -85,6 +86,25 @@ const (
 	// 也容易在小池子上耗尽。仅适用于 kiro 平台(其他平台 handler 层 failover 已足够)。
 	kiroServiceRetryMaxEnv     = "KIRO_SERVICE_RETRY_MAX"
 	kiroServiceRetryMaxDefault = 3
+
+	// P1 #5: KIRO_FAMILY_COOLDOWN_ENABLED 是否启用 (Kiro account × model family) 冷却。
+	// 默认开启:让 Sonnet 撞 429 时,Opus/Haiku 在同账号上仍可用,贴近 Kiro 后端按
+	// model 维度限流的真实行为。设为 false / 0 / no / off 即关闭(完全退化到账号级 cooldown 行为)。
+	kiroFamilyCooldownEnabledEnv     = "KIRO_FAMILY_COOLDOWN_ENABLED"
+	kiroFamilyCooldownEnabledDefault = true
+
+	// P1 #5: 上游 Retry-After 缺失时,family 冷却默认时长(秒)。默认 60。
+	// 与账号级 cooldown 的 ShortCooldown(1min) 保持一致,后续观察后可独立调整。
+	kiroFamilyCooldownDefaultEnv     = "KIRO_FAMILY_COOLDOWN_DEFAULT_S"
+	kiroFamilyCooldownDefaultSeconds = 60
+
+	// P1 #8: Retry-After 解析的最小/最大兜底 (毫秒/秒)。
+	// 最小 200ms:上游可能返回 15-50ms 这种瞬时值,跟着会让账号刚解锁就撞墙。
+	// 最大 7 天:防异常值;Kiro OAuth 的 monthly_request_count 走另一条专用路径(reset 到下月 1 号)。
+	kiroRetryAfterMinMSEnv     = "KIRO_RETRY_AFTER_MIN_MS"
+	kiroRetryAfterMinMSDefault = 200
+	kiroRetryAfterMaxSEnv      = "KIRO_RETRY_AFTER_MAX_S"
+	kiroRetryAfterMaxSDefault  = 7 * 24 * 60 * 60 // 7 天
 )
 
 // kiroServiceRetryMax 从 env 读取 service 层 failover 重试次数。<0 回退默认 3,=0 关闭。
@@ -122,6 +142,58 @@ func kiroRPMWindowSec() int {
 		return v
 	}
 	return kiroRPMWindowSecDefault
+}
+
+// kiroFamilyCooldownEnabled 从 env 读取 family 冷却开关。
+// 缺失 / 解析失败 → 默认开启。识别 false / 0 / no / off 关键字关闭。
+func kiroFamilyCooldownEnabled() bool {
+	raw := strings.TrimSpace(strings.ToLower(os.Getenv(kiroFamilyCooldownEnabledEnv)))
+	if raw == "" {
+		return kiroFamilyCooldownEnabledDefault
+	}
+	switch raw {
+	case "false", "0", "no", "off", "disabled":
+		return false
+	default:
+		return true
+	}
+}
+
+// kiroFamilyCooldownDefault 从 env 读取 family 冷却的默认时长(无 Retry-After 时使用)。
+// <=0 回退默认 60s。
+func kiroFamilyCooldownDefault() time.Duration {
+	raw := strings.TrimSpace(os.Getenv(kiroFamilyCooldownDefaultEnv))
+	if raw == "" {
+		return time.Duration(kiroFamilyCooldownDefaultSeconds) * time.Second
+	}
+	if v, err := strconv.Atoi(raw); err == nil && v > 0 {
+		return time.Duration(v) * time.Second
+	}
+	return time.Duration(kiroFamilyCooldownDefaultSeconds) * time.Second
+}
+
+// kiroRetryAfterMinMS 从 env 读取 Retry-After 最小兜底毫秒。<=0 回退默认 200。
+func kiroRetryAfterMinMS() int64 {
+	raw := strings.TrimSpace(os.Getenv(kiroRetryAfterMinMSEnv))
+	if raw == "" {
+		return int64(kiroRetryAfterMinMSDefault)
+	}
+	if v, err := strconv.ParseInt(raw, 10, 64); err == nil && v > 0 {
+		return v
+	}
+	return int64(kiroRetryAfterMinMSDefault)
+}
+
+// kiroRetryAfterMaxS 从 env 读取 Retry-After 最大兜底秒数。<=0 回退默认 7d。
+func kiroRetryAfterMaxS() int64 {
+	raw := strings.TrimSpace(os.Getenv(kiroRetryAfterMaxSEnv))
+	if raw == "" {
+		return int64(kiroRetryAfterMaxSDefault)
+	}
+	if v, err := strconv.ParseInt(raw, 10, 64); err == nil && v > 0 {
+		return v
+	}
+	return int64(kiroRetryAfterMaxSDefault)
 }
 
 const (
@@ -624,7 +696,8 @@ type GatewayService struct {
 	claudeTokenProvider   *ClaudeTokenProvider
 	kiroTokenProvider     *KiroTokenProvider
 	kiroCooldownStore     KiroCooldownStore
-	kiroRPMStore          *kirorpm.Store    // Kiro 平台账号级 RPM 滑动窗口；nil 时跳过
+	kiroRPMStore          *kirorpm.Store     // Kiro 平台账号级 RPM 滑动窗口；nil 时跳过
+	kiroFamilyCooldown    *kirofamily.Store  // P1 #5: (account, model family) 维度冷却；nil 时退化为账号级
 	sessionLimitCache     SessionLimitCache // 会话数量限制缓存（仅 Anthropic OAuth/SetupToken）
 	rpmCache              RPMCache          // RPM 计数缓存（仅 Anthropic OAuth/SetupToken）
 	userGroupRateResolver *userGroupRateResolver
@@ -666,6 +739,7 @@ func NewGatewayService(
 	kiroTokenProvider *KiroTokenProvider,
 	kiroCooldownStore KiroCooldownStore,
 	kiroRPMStore *kirorpm.Store,
+	kiroFamilyCooldown *kirofamily.Store,
 	sessionLimitCache SessionLimitCache,
 	rpmCache RPMCache,
 	digestStore *DigestSessionStore,
@@ -701,6 +775,7 @@ func NewGatewayService(
 		kiroTokenProvider:    kiroTokenProvider,
 		kiroCooldownStore:    kiroCooldownStore,
 		kiroRPMStore:         kiroRPMStore,
+		kiroFamilyCooldown:   kiroFamilyCooldown,
 		sessionLimitCache:    sessionLimitCache,
 		rpmCache:             rpmCache,
 		userGroupRateCache:   gocache.New(userGroupRateTTL, time.Minute),
@@ -2440,6 +2515,9 @@ func (s *GatewayService) isAccountSchedulableForSelection(account *Account) bool
 	return s.isKiroRuntimeSchedulable(context.Background(), account)
 }
 
+// isAccountSchedulableForModelSelection 选号阶段的 model-aware 调度检查。
+// P1 #5: 改为调 isKiroRuntimeSchedulableForModel,带 family 维度检查;Kiro 账号
+// 在 Sonnet 撞 429 时,Opus/Haiku 仍可被选中。
 func (s *GatewayService) isAccountSchedulableForModelSelection(ctx context.Context, account *Account, requestedModel string) bool {
 	if account == nil {
 		return false
@@ -2447,7 +2525,7 @@ func (s *GatewayService) isAccountSchedulableForModelSelection(ctx context.Conte
 	if !account.IsSchedulableForModelWithContext(ctx, requestedModel) {
 		return false
 	}
-	return s.isKiroRuntimeSchedulable(ctx, account)
+	return s.isKiroRuntimeSchedulableForModel(ctx, account, requestedModel)
 }
 
 // isKiroAccountSchedulableForRPM 检查 Kiro 账号当前窗口是否未达 RPM 上限。
@@ -2509,6 +2587,12 @@ func (s *GatewayService) DecrementKiroRPM(ctx context.Context, accountID int64) 
 	s.kiroRPMStore.Decrement(ctx, accountID)
 }
 
+// isKiroRuntimeSchedulable 账号级 Kiro 调度检查:仅看账号级 cooldown(kirocooldown)。
+// 不检查 family cooldown — 调用方若需要 model 维度判断,请用
+// isKiroRuntimeSchedulableForModel。
+//
+// 保留此函数是因为 isAccountSchedulableForSelection 等部分调用路径没有 requestedModel
+// 上下文(例如展示账号列表 / 后台账号选号),只能做账号级判断。
 func (s *GatewayService) isKiroRuntimeSchedulable(ctx context.Context, account *Account) bool {
 	if account == nil || account.Platform != PlatformKiro || account.Type != AccountTypeOAuth || s == nil || s.kiroCooldownStore == nil {
 		return true
@@ -2518,6 +2602,33 @@ func (s *GatewayService) isKiroRuntimeSchedulable(ctx context.Context, account *
 		return true
 	}
 	return state == nil || !state.Active
+}
+
+// isKiroRuntimeSchedulableForModel P1 #5: 带 model 维度的 Kiro 调度检查。
+//
+// 检查链:
+//  1. 账号级 cooldown(原账号级 cooldown,如 monthly_request_count / suspended): 命中即不可调度
+//  2. (account, model family) 级 cooldown: 命中即对该 model 不可调度,但其他 family 仍可
+//
+// requestedModel 为空时(routing 等少数路径)退化为只做账号级检查。
+// kiroFamilyCooldown=nil 或 KIRO_FAMILY_COOLDOWN_ENABLED=false 时跳过 family 检查,
+// 完全等同于 isKiroRuntimeSchedulable(便于回滚)。
+func (s *GatewayService) isKiroRuntimeSchedulableForModel(ctx context.Context, account *Account, requestedModel string) bool {
+	if !s.isKiroRuntimeSchedulable(ctx, account) {
+		return false
+	}
+	if account == nil || account.Platform != PlatformKiro || account.Type != AccountTypeOAuth {
+		return true
+	}
+	if s == nil || s.kiroFamilyCooldown == nil || !kiroFamilyCooldownEnabled() {
+		return true
+	}
+	family := kirofamily.FamilyKey(requestedModel)
+	if family == "" {
+		return true
+	}
+	inCooldown, _ := s.kiroFamilyCooldown.IsInCooldown(ctx, account.ID, family)
+	return !inCooldown
 }
 
 func (s *GatewayService) tryRecoverKiroCooldownPool(ctx context.Context, accounts []Account, requestedModel string, excludedIDs map[int64]struct{}, allowMixedScheduling bool) bool {
