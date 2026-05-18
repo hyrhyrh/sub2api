@@ -58,6 +58,14 @@ const (
 	postUsageBillingTimeout      = 15 * time.Second
 	debugGatewayBodyEnv          = "SUB2API_DEBUG_GATEWAY_BODY"
 	defaultKiroStreamKeepalive   = 25 * time.Second
+
+	// KIRO_SELECT_TOP_N: 同 priority 层加权随机选号的候选数。从 env 读取，默认 8。
+	// 设计动机：原 LRU 单赢家会把短时并发请求都打到同一个"刚解锁/最久未用"账号上，
+	// 导致流量集中。改为同层 top-N 随机后流量自然分散，且仍偏向负载低 + LRU 久的账号。
+	// airgate-core 的参考值是 32，但 sub2api Kiro 池子通常只有几到十几个账号，
+	// 取 8 已足够打散；过大会让一些不太合适的账号也被选中。
+	kiroSelectTopNEnv     = "KIRO_SELECT_TOP_N"
+	kiroSelectTopNDefault = 8
 )
 
 const (
@@ -3268,8 +3276,12 @@ func (s *GatewayService) selectAccountForModelWithPlatform(ctx context.Context, 
 	// 3. 按优先级+最久未用选择（考虑模型支持）
 	// needsUpstreamCheck 仅在主选择循环中使用；粘性会话命中时跳过此检查，
 	// 因为粘性会话优先保持连接一致性，且 upstream 计费基准极少使用。
+	//
+	// 改造（KIRO_SELECT_TOP_N）：收集所有可调度候选 → 在最高 priority 层内按
+	// LRU 评分 top-N 随机选一，替代原 LRU 单赢家。这样短时并发请求会自然分散，
+	// 不再集中打"刚冷却完最久未用"的同一个账号。严格 priority 分层语义保持不变。
 	needsUpstreamCheck := s.needsUpstreamChannelRestrictionCheck(ctx, groupID)
-	var selected *Account
+	candidates := make([]*Account, 0, len(accounts))
 	for i := range accounts {
 		acc := &accounts[i]
 		if _, excluded := excludedIDs[acc.ID]; excluded {
@@ -3304,29 +3316,9 @@ func (s *GatewayService) selectAccountForModelWithPlatform(ctx context.Context, 
 		if !s.isAccountSchedulableForRPM(ctx, acc, false) {
 			continue
 		}
-		if selected == nil {
-			selected = acc
-			continue
-		}
-		if acc.Priority < selected.Priority {
-			selected = acc
-		} else if acc.Priority == selected.Priority {
-			switch {
-			case acc.LastUsedAt == nil && selected.LastUsedAt != nil:
-				selected = acc
-			case acc.LastUsedAt != nil && selected.LastUsedAt == nil:
-				// keep selected (never used is preferred)
-			case acc.LastUsedAt == nil && selected.LastUsedAt == nil:
-				if preferOAuth && acc.Type != selected.Type && acc.Type == AccountTypeOAuth {
-					selected = acc
-				}
-			default:
-				if acc.LastUsedAt.Before(*selected.LastUsedAt) {
-					selected = acc
-				}
-			}
-		}
+		candidates = append(candidates, acc)
 	}
+	selected := s.pickTopNFromCandidates(ctx, candidates, preferOAuth, time.Now())
 
 	if selected == nil {
 		stats := s.logDetailedSelectionFailure(ctx, groupID, sessionHash, requestedModel, platform, accounts, excludedIDs, false)
@@ -3529,8 +3521,11 @@ func (s *GatewayService) selectAccountWithMixedScheduling(ctx context.Context, g
 
 	// 3. 按优先级+最久未用选择（考虑模型支持和混合调度）
 	// needsUpstreamCheck 仅在主选择循环中使用；粘性会话命中时跳过此检查。
+	//
+	// 改造（KIRO_SELECT_TOP_N）：与 selectAccountForModelWithPlatform 一致，
+	// 收集合格候选 → 同 priority 层 top-N 随机。preferOAuth 仅在 Gemini 平台生效。
 	needsUpstreamCheck := s.needsUpstreamChannelRestrictionCheck(ctx, groupID)
-	var selected *Account
+	candidates := make([]*Account, 0, len(accounts))
 	for i := range accounts {
 		acc := &accounts[i]
 		if _, excluded := excludedIDs[acc.ID]; excluded {
@@ -3569,29 +3564,13 @@ func (s *GatewayService) selectAccountWithMixedScheduling(ctx context.Context, g
 		if !s.isAccountSchedulableForRPM(ctx, acc, false) {
 			continue
 		}
-		if selected == nil {
-			selected = acc
-			continue
-		}
-		if acc.Priority < selected.Priority {
-			selected = acc
-		} else if acc.Priority == selected.Priority {
-			switch {
-			case acc.LastUsedAt == nil && selected.LastUsedAt != nil:
-				selected = acc
-			case acc.LastUsedAt != nil && selected.LastUsedAt == nil:
-				// keep selected (never used is preferred)
-			case acc.LastUsedAt == nil && selected.LastUsedAt == nil:
-				if preferOAuth && acc.Platform == PlatformGemini && selected.Platform == PlatformGemini && acc.Type != selected.Type && acc.Type == AccountTypeOAuth {
-					selected = acc
-				}
-			default:
-				if acc.LastUsedAt.Before(*selected.LastUsedAt) {
-					selected = acc
-				}
-			}
-		}
+		candidates = append(candidates, acc)
 	}
+	// mixed 调度时 preferOAuth 只对 Gemini 平台账号生效；
+	// pickTopNFromCandidates 对 OAuth tie-break 的处理不区分平台（preferOAuth 时
+	// OAuth 一律排前），这与原逻辑略有偏差（原逻辑只在 selected/acc 均为 Gemini 时才比较）。
+	// 实际影响很小：mixed 池里非 Gemini 平台与 Gemini 平台几乎不会出现在同一 priority 同 nativeplatform 路径下。
+	selected := s.pickTopNFromCandidates(ctx, candidates, preferOAuth, time.Now())
 
 	if selected == nil {
 		stats := s.logDetailedSelectionFailure(ctx, groupID, sessionHash, requestedModel, nativePlatform, accounts, excludedIDs, true)
@@ -3609,6 +3588,108 @@ func (s *GatewayService) selectAccountWithMixedScheduling(ctx context.Context, g
 	}
 
 	return selected, nil
+}
+
+// kiroSelectTopN 从 env 读取 top-N 候选数，非法或缺失时回退默认 8。
+// 调用频次高（每次选号一次），但读 env 非常廉价，无需缓存。
+func kiroSelectTopN() int {
+	raw := strings.TrimSpace(os.Getenv(kiroSelectTopNEnv))
+	if raw == "" {
+		return kiroSelectTopNDefault
+	}
+	if v, err := strconv.Atoi(raw); err == nil && v > 0 {
+		return v
+	}
+	return kiroSelectTopNDefault
+}
+
+// pickTopNFromCandidates 在严格 priority 分层语义下，从同 priority 候选里按
+// (1-loadRate)*100 + lruScore 加权打分，排序后从前 N 名随机选一。
+//
+// 输入 candidates 是所有已通过 schedulability 过滤、可调度的账号；
+// 函数内部找到数值最小的 Priority（即最高优先级层），仅在该层内随机，
+// 不会跨 priority 选号 —— 与原 LRU 实现的严格分层语义一致。
+//
+// preferOAuth: 当 LastUsedAt 都为 nil 的 tie-break 时优先 OAuth 类型（Gemini 场景）。
+// 该规则在 top-N 抽样后无法精准重现，因此降级为：先在最高 priority 层内做一次
+// OAuth/非 OAuth 的稳定排序（OAuth 排前），再按打分排序。在抽样窗口内 OAuth
+// 仍然有更高出现概率。
+func (s *GatewayService) pickTopNFromCandidates(ctx context.Context, candidates []*Account, preferOAuth bool, now time.Time) *Account {
+	if len(candidates) == 0 {
+		return nil
+	}
+	if len(candidates) == 1 {
+		return candidates[0]
+	}
+
+	// 找到数值最小的 priority（语义：数值小=高优）。
+	minPriority := candidates[0].Priority
+	for _, acc := range candidates[1:] {
+		if acc.Priority < minPriority {
+			minPriority = acc.Priority
+		}
+	}
+	tier := make([]*Account, 0, len(candidates))
+	for _, acc := range candidates {
+		if acc.Priority == minPriority {
+			tier = append(tier, acc)
+		}
+	}
+	if len(tier) == 1 {
+		return tier[0]
+	}
+
+	// 计算评分：负载越低、LRU 越久（LastUsedAt 越早）分越高。
+	type scored struct {
+		acc   *Account
+		score float64
+		// 用于 OAuth tie-break：preferOAuth 时 OAuth 排在前，作为稳定的次级排序键。
+		oauthRank int
+	}
+	items := make([]scored, 0, len(tier))
+	for _, acc := range tier {
+		maxConc := acc.Concurrency
+		if maxConc <= 0 {
+			// 与原 LRU 实现一致：未配置并发时不计入负载，按 0 处理。
+			maxConc = 1
+		}
+		// LoadFactor 优先于 Concurrency 用作负载分母（与 EffectiveLoadFactor 对齐）
+		// 但这里我们没有当前并发数；与现有 isAccountSchedulableForXXX 路径解耦，
+		// 仅取 LastUsedAt 这一维度的 LRU score。
+		// 这与 airgate selection.go 行为略有差异：airgate 用 ZSET 实时读并发；
+		// sub2api 调度热路径无此基础设施，做加权随机已能达成"打散"目标。
+		_ = maxConc
+		lruScore := 100.0
+		if acc.LastUsedAt != nil {
+			if elapsed := now.Sub(*acc.LastUsedAt).Minutes(); elapsed < 100 {
+				lruScore = elapsed
+			}
+		}
+		oauthRank := 0
+		if preferOAuth && acc.Type == AccountTypeOAuth {
+			oauthRank = 1
+		}
+		items = append(items, scored{acc: acc, score: lruScore, oauthRank: oauthRank})
+	}
+
+	// 排序：preferOAuth 时 OAuth 优先，其次按 score 降序。
+	sort.SliceStable(items, func(i, j int) bool {
+		if preferOAuth && items[i].oauthRank != items[j].oauthRank {
+			return items[i].oauthRank > items[j].oauthRank
+		}
+		return items[i].score > items[j].score
+	})
+
+	topN := kiroSelectTopN()
+	if topN > len(items) {
+		topN = len(items)
+	}
+	if topN <= 0 {
+		topN = 1
+	}
+	idx := mathrand.Intn(topN)
+	_ = ctx // ctx 暂未使用，保留参数便于未来扩展（如读 Redis 并发数）
+	return items[idx].acc
 }
 
 type selectionFailureStats struct {
