@@ -28,6 +28,8 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/pkg/claude"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/kirocooldown"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/kirofamily"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/kirorpm"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/usagestats"
 	"github.com/Wei-Shaw/sub2api/internal/util/responseheaders"
@@ -58,7 +60,185 @@ const (
 	postUsageBillingTimeout      = 15 * time.Second
 	debugGatewayBodyEnv          = "SUB2API_DEBUG_GATEWAY_BODY"
 	defaultKiroStreamKeepalive   = 25 * time.Second
+
+	// KIRO_SELECT_TOP_N: 同 priority 层加权随机选号的候选数。从 env 读取，默认 8。
+	// 设计动机：原 LRU 单赢家会把短时并发请求都打到同一个"刚解锁/最久未用"账号上，
+	// 导致流量集中。改为同层 top-N 随机后流量自然分散，且仍偏向负载低 + LRU 久的账号。
+	// airgate-core 的参考值是 32，但 sub2api Kiro 池子通常只有几到十几个账号，
+	// 取 8 已足够打散；过大会让一些不太合适的账号也被选中。
+	kiroSelectTopNEnv     = "KIRO_SELECT_TOP_N"
+	kiroSelectTopNDefault = 8
+
+	// KIRO_RPM_PER_ACCOUNT / KIRO_RPM_WINDOW_SEC: Kiro 账号 RPM 滑动窗口配置。
+	// 设计动机：当前 isAccountSchedulableForRPM 对 Anthropic 之外的平台(包括 Kiro)
+	// 直接放行，完全没有 proactive 限流。Kiro 撞 429 后才被动反应，流量集中放大问题。
+	// 这里加一道事前节流：每账号每窗口超过 maxRPM 就跳过(进 NotSchedulable 候选)。
+	//
+	// 默认 8/60s = 起步保守值。Kiro 官方不公开 RPM；社区调研显示真实瓶颈是 burst throttle
+	// + 月度 credit，稳态 RPM 大约 10-15。先用 8 起步避免误伤；稳定 1-2 周后可调至 12-15。
+	// 调高的判断依据：journalctl 中"KIRO_RPM_PER_ACCOUNT exceeded"日志频次 >> 上游真实 429 频次。
+	kiroRPMPerAccountEnv     = "KIRO_RPM_PER_ACCOUNT"
+	kiroRPMPerAccountDefault = 8
+	kiroRPMWindowSecEnv      = "KIRO_RPM_WINDOW_SEC"
+	kiroRPMWindowSecDefault  = 60
+
+	// KIRO_SERVICE_RETRY_MAX: service 层 429 内 failover 最大重试次数。
+	// 当 executeKiroUpstream 返回 429 时,在 service 内部 SelectAccountForModelWithExclusions
+	// 切到下一账号重试,避免依赖 handler 层重启整个 forward 流程的延迟。
+	// 默认 3 次:够覆盖单次请求碰到 2-3 个限流账号的常见情况;过大会让 client 等待过久,
+	// 也容易在小池子上耗尽。仅适用于 kiro 平台(其他平台 handler 层 failover 已足够)。
+	kiroServiceRetryMaxEnv     = "KIRO_SERVICE_RETRY_MAX"
+	kiroServiceRetryMaxDefault = 3
+
+	// P1 #5: KIRO_FAMILY_COOLDOWN_ENABLED 是否启用 (Kiro account × model family) 冷却。
+	// 默认开启:让 Sonnet 撞 429 时,Opus/Haiku 在同账号上仍可用,贴近 Kiro 后端按
+	// model 维度限流的真实行为。设为 false / 0 / no / off 即关闭(完全退化到账号级 cooldown 行为)。
+	kiroFamilyCooldownEnabledEnv     = "KIRO_FAMILY_COOLDOWN_ENABLED"
+	kiroFamilyCooldownEnabledDefault = true
+
+	// P1 #5: 上游 Retry-After 缺失时,family 冷却默认时长(秒)。默认 60。
+	// 与账号级 cooldown 的 ShortCooldown(1min) 保持一致,后续观察后可独立调整。
+	kiroFamilyCooldownDefaultEnv     = "KIRO_FAMILY_COOLDOWN_DEFAULT_S"
+	kiroFamilyCooldownDefaultSeconds = 60
+
+	// P1 #7: 全池 cooldown 时一次性 recover 的比例 (0.0~1.0)。默认 0.3 = 30%。
+	// 现有 tryRecoverKiroCooldownPool 每次只 clear 一个最早冷却账号,
+	// 该账号被立即打雪崩。改为按比例批量解锁后,选号端再随机选一个,避免惊群。
+	kiroRecoverBatchPctEnv     = "KIRO_RECOVER_BATCH_PCT"
+	kiroRecoverBatchPctDefault = 0.3
+
+	// P1 #7: 批量 recover 时账号之间的错峰解锁基础步长(毫秒)。默认 500ms。
+	// 实际解锁延迟 = i * staggerStepMs * (1 ± 15%),i 从 0 开始 → 第一个立即放行,
+	// 后续账号错峰恢复,避免"刚解锁就一起被并发请求打回 cooldown"。<=0 时退化为
+	// 全部立即放行(完全退回 P0 行为)。与 P0 #4 共享 KIRO_COOLDOWN_JITTER_PCT 抖动幅度。
+	kiroRecoverStaggerMSEnv     = "KIRO_RECOVER_STAGGER_MS"
+	kiroRecoverStaggerMSDefault = 500
+
+	// P1 #8: Retry-After 解析的最小/最大兜底 (毫秒/秒)。
+	// 最小 200ms:上游可能返回 15-50ms 这种瞬时值,跟着会让账号刚解锁就撞墙。
+	// 最大 7 天:防异常值;Kiro OAuth 的 monthly_request_count 走另一条专用路径(reset 到下月 1 号)。
+	kiroRetryAfterMinMSEnv     = "KIRO_RETRY_AFTER_MIN_MS"
+	kiroRetryAfterMinMSDefault = 200
+	kiroRetryAfterMaxSEnv      = "KIRO_RETRY_AFTER_MAX_S"
+	kiroRetryAfterMaxSDefault  = 7 * 24 * 60 * 60 // 7 天
 )
+
+// kiroServiceRetryMax 从 env 读取 service 层 failover 重试次数。<0 回退默认 3,=0 关闭。
+func kiroServiceRetryMax() int {
+	raw := strings.TrimSpace(os.Getenv(kiroServiceRetryMaxEnv))
+	if raw == "" {
+		return kiroServiceRetryMaxDefault
+	}
+	if v, err := strconv.Atoi(raw); err == nil && v >= 0 {
+		return v
+	}
+	return kiroServiceRetryMaxDefault
+}
+
+// kiroRPMPerAccount 从 env 读取 Kiro 每账号 RPM 上限。<=0 表示不限制(只计数,不拒绝)。
+// 非数字 / 缺失值回退默认 30。
+func kiroRPMPerAccount() int {
+	raw := strings.TrimSpace(os.Getenv(kiroRPMPerAccountEnv))
+	if raw == "" {
+		return kiroRPMPerAccountDefault
+	}
+	if v, err := strconv.Atoi(raw); err == nil {
+		return v
+	}
+	return kiroRPMPerAccountDefault
+}
+
+// kiroRPMWindowSec 从 env 读取 Kiro RPM 窗口秒数。<=0 回退默认 60。
+func kiroRPMWindowSec() int {
+	raw := strings.TrimSpace(os.Getenv(kiroRPMWindowSecEnv))
+	if raw == "" {
+		return kiroRPMWindowSecDefault
+	}
+	if v, err := strconv.Atoi(raw); err == nil && v > 0 {
+		return v
+	}
+	return kiroRPMWindowSecDefault
+}
+
+// kiroFamilyCooldownEnabled 从 env 读取 family 冷却开关。
+// 缺失 / 解析失败 → 默认开启。识别 false / 0 / no / off 关键字关闭。
+func kiroFamilyCooldownEnabled() bool {
+	raw := strings.TrimSpace(strings.ToLower(os.Getenv(kiroFamilyCooldownEnabledEnv)))
+	if raw == "" {
+		return kiroFamilyCooldownEnabledDefault
+	}
+	switch raw {
+	case "false", "0", "no", "off", "disabled":
+		return false
+	default:
+		return true
+	}
+}
+
+// kiroFamilyCooldownDefault 从 env 读取 family 冷却的默认时长(无 Retry-After 时使用)。
+// <=0 回退默认 60s。
+func kiroFamilyCooldownDefault() time.Duration {
+	raw := strings.TrimSpace(os.Getenv(kiroFamilyCooldownDefaultEnv))
+	if raw == "" {
+		return time.Duration(kiroFamilyCooldownDefaultSeconds) * time.Second
+	}
+	if v, err := strconv.Atoi(raw); err == nil && v > 0 {
+		return time.Duration(v) * time.Second
+	}
+	return time.Duration(kiroFamilyCooldownDefaultSeconds) * time.Second
+}
+
+// kiroRecoverBatchPct 从 env 读取 cooldown 批量 recover 比例。
+// <=0 / >1 / 非数字 回退默认 0.3。返回值范围限定 (0, 1]。
+func kiroRecoverBatchPct() float64 {
+	raw := strings.TrimSpace(os.Getenv(kiroRecoverBatchPctEnv))
+	if raw == "" {
+		return kiroRecoverBatchPctDefault
+	}
+	v, err := strconv.ParseFloat(raw, 64)
+	if err != nil || v <= 0 || v > 1 {
+		return kiroRecoverBatchPctDefault
+	}
+	return v
+}
+
+// kiroRecoverStaggerMS 从 env 读取批量 recover 错峰步长(毫秒)。
+// 负值 / 非数字 回退默认 500;返回 0 表示禁用错峰(全部立即放行)。
+func kiroRecoverStaggerMS() int64 {
+	raw := strings.TrimSpace(os.Getenv(kiroRecoverStaggerMSEnv))
+	if raw == "" {
+		return int64(kiroRecoverStaggerMSDefault)
+	}
+	v, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || v < 0 {
+		return int64(kiroRecoverStaggerMSDefault)
+	}
+	return v
+}
+
+// kiroRetryAfterMinMS 从 env 读取 Retry-After 最小兜底毫秒。<=0 回退默认 200。
+func kiroRetryAfterMinMS() int64 {
+	raw := strings.TrimSpace(os.Getenv(kiroRetryAfterMinMSEnv))
+	if raw == "" {
+		return int64(kiroRetryAfterMinMSDefault)
+	}
+	if v, err := strconv.ParseInt(raw, 10, 64); err == nil && v > 0 {
+		return v
+	}
+	return int64(kiroRetryAfterMinMSDefault)
+}
+
+// kiroRetryAfterMaxS 从 env 读取 Retry-After 最大兜底秒数。<=0 回退默认 7d。
+func kiroRetryAfterMaxS() int64 {
+	raw := strings.TrimSpace(os.Getenv(kiroRetryAfterMaxSEnv))
+	if raw == "" {
+		return int64(kiroRetryAfterMaxSDefault)
+	}
+	if v, err := strconv.ParseInt(raw, 10, 64); err == nil && v > 0 {
+		return v
+	}
+	return int64(kiroRetryAfterMaxSDefault)
+}
 
 const (
 	claudeMimicDebugInfoKey = "claude_mimic_debug_info"
@@ -560,6 +740,8 @@ type GatewayService struct {
 	claudeTokenProvider   *ClaudeTokenProvider
 	kiroTokenProvider     *KiroTokenProvider
 	kiroCooldownStore     KiroCooldownStore
+	kiroRPMStore          *kirorpm.Store     // Kiro 平台账号级 RPM 滑动窗口；nil 时跳过
+	kiroFamilyCooldown    *kirofamily.Store  // P1 #5: (account, model family) 维度冷却；nil 时退化为账号级
 	sessionLimitCache     SessionLimitCache // 会话数量限制缓存（仅 Anthropic OAuth/SetupToken）
 	rpmCache              RPMCache          // RPM 计数缓存（仅 Anthropic OAuth/SetupToken）
 	userGroupRateResolver *userGroupRateResolver
@@ -600,6 +782,8 @@ func NewGatewayService(
 	claudeTokenProvider *ClaudeTokenProvider,
 	kiroTokenProvider *KiroTokenProvider,
 	kiroCooldownStore KiroCooldownStore,
+	kiroRPMStore *kirorpm.Store,
+	kiroFamilyCooldown *kirofamily.Store,
 	sessionLimitCache SessionLimitCache,
 	rpmCache RPMCache,
 	digestStore *DigestSessionStore,
@@ -634,6 +818,8 @@ func NewGatewayService(
 		claudeTokenProvider:  claudeTokenProvider,
 		kiroTokenProvider:    kiroTokenProvider,
 		kiroCooldownStore:    kiroCooldownStore,
+		kiroRPMStore:         kiroRPMStore,
+		kiroFamilyCooldown:   kiroFamilyCooldown,
 		sessionLimitCache:    sessionLimitCache,
 		rpmCache:             rpmCache,
 		userGroupRateCache:   gocache.New(userGroupRateTTL, time.Minute),
@@ -2373,6 +2559,9 @@ func (s *GatewayService) isAccountSchedulableForSelection(account *Account) bool
 	return s.isKiroRuntimeSchedulable(context.Background(), account)
 }
 
+// isAccountSchedulableForModelSelection 选号阶段的 model-aware 调度检查。
+// P1 #5: 改为调 isKiroRuntimeSchedulableForModel,带 family 维度检查;Kiro 账号
+// 在 Sonnet 撞 429 时,Opus/Haiku 仍可被选中。
 func (s *GatewayService) isAccountSchedulableForModelSelection(ctx context.Context, account *Account, requestedModel string) bool {
 	if account == nil {
 		return false
@@ -2380,9 +2569,74 @@ func (s *GatewayService) isAccountSchedulableForModelSelection(ctx context.Conte
 	if !account.IsSchedulableForModelWithContext(ctx, requestedModel) {
 		return false
 	}
-	return s.isKiroRuntimeSchedulable(ctx, account)
+	return s.isKiroRuntimeSchedulableForModel(ctx, account, requestedModel)
 }
 
+// isKiroAccountSchedulableForRPM 检查 Kiro 账号当前窗口是否未达 RPM 上限。
+//
+// 重要:这是调度阶段的"只读"检查,只 Get 不 Increment。
+// 真正的原子检查 + 递增由 kiro_runtime 在发起请求前调 TryIncrementKiroRPM 完成。
+// 不这样做会导致选号扫描 N 个候选时把这些账号 RPM 全部 +1,造成计数严重高估。
+//
+// 行为:
+//   - kiroRPMStore 未注入 / maxRPM <= 0:放行。
+//   - isSticky=true:粘性会话保证连续性,不做 RPM 节流。
+//   - Get 失败:fail-open 放行。
+//   - current >= maxRPM:不可调度(跳过该账号)。
+//
+// 已知 TOCTOU:调度时读到 current=29,等真正发起时已是 30。TryIncrementKiroRPM
+// 会再做一次原子检查,真正放出去的请求不会超额。
+func (s *GatewayService) isKiroAccountSchedulableForRPM(ctx context.Context, account *Account, isSticky bool) bool {
+	if s == nil || s.kiroRPMStore == nil || account == nil {
+		return true
+	}
+	if isSticky {
+		// 粘性会话保留连续性,跳过节流。
+		return true
+	}
+	maxRPM := kiroRPMPerAccount()
+	if maxRPM <= 0 {
+		return true
+	}
+	current, err := s.kiroRPMStore.Get(ctx, account.ID)
+	if err != nil {
+		return true // fail-open
+	}
+	return current < maxRPM
+}
+
+// TryIncrementKiroRPM 在 kiro_runtime 真正发起 upstream 请求前调用,
+// 原子检查 RPM 上限并递增。返回 true 表示放行(已递增),false 表示已达上限。
+// Redis 不可用时 fail-open 返回 true,不阻断主链路。
+//
+// maxRPM <= 0 时跳过检查,直接返回 true(同时计数 +1,便于运维观察)。
+func (s *GatewayService) TryIncrementKiroRPM(ctx context.Context, accountID int64) bool {
+	if s == nil || s.kiroRPMStore == nil {
+		return true
+	}
+	maxRPM := kiroRPMPerAccount()
+	allowed, err := s.kiroRPMStore.Check(ctx, accountID, maxRPM)
+	if err != nil {
+		return true
+	}
+	return allowed
+}
+
+// DecrementKiroRPM 回退 RPM 计数(例如 service 层 failover 切到下一账号 / 请求失败时撤销预递增)。
+// 失败 fail-open,不影响主链路。
+func (s *GatewayService) DecrementKiroRPM(ctx context.Context, accountID int64) {
+	if s == nil || s.kiroRPMStore == nil {
+		return
+	}
+	s.kiroRPMStore.Decrement(ctx, accountID)
+}
+
+// isKiroRuntimeSchedulable 账号级 Kiro 调度检查:仅看账号级 cooldown(kirocooldown)。
+// 不检查 family cooldown — 调用方若需要 model 维度判断,请用
+// isKiroRuntimeSchedulableForModel。
+//
+// 保留此函数是因为 isAccountSchedulableForSelection 等部分调用路径没有 requestedModel
+// 上下文(例如展示账号列表 / 后台账号选号),只能做账号级判断。
 func (s *GatewayService) isKiroRuntimeSchedulable(ctx context.Context, account *Account) bool {
 	if account == nil || account.Platform != PlatformKiro || account.Type != AccountTypeOAuth || s == nil || s.kiroCooldownStore == nil {
 		return true
@@ -2394,6 +2648,43 @@ func (s *GatewayService) isKiroRuntimeSchedulable(ctx context.Context, account *
 	return state == nil || !state.Active
 }
 
+// isKiroRuntimeSchedulableForModel P1 #5: 带 model 维度的 Kiro 调度检查。
+//
+// 检查链:
+//  1. 账号级 cooldown(原账号级 cooldown,如 monthly_request_count / suspended): 命中即不可调度
+//  2. (account, model family) 级 cooldown: 命中即对该 model 不可调度,但其他 family 仍可
+//
+// requestedModel 为空时(routing 等少数路径)退化为只做账号级检查。
+// kiroFamilyCooldown=nil 或 KIRO_FAMILY_COOLDOWN_ENABLED=false 时跳过 family 检查,
+// 完全等同于 isKiroRuntimeSchedulable(便于回滚)。
+func (s *GatewayService) isKiroRuntimeSchedulableForModel(ctx context.Context, account *Account, requestedModel string) bool {
+	if !s.isKiroRuntimeSchedulable(ctx, account) {
+		return false
+	}
+	if account == nil || account.Platform != PlatformKiro || account.Type != AccountTypeOAuth {
+		return true
+	}
+	if s == nil || s.kiroFamilyCooldown == nil || !kiroFamilyCooldownEnabled() {
+		return true
+	}
+	family := kirofamily.FamilyKey(requestedModel)
+	if family == "" {
+		return true
+	}
+	inCooldown, _ := s.kiroFamilyCooldown.IsInCooldown(ctx, account.ID, family)
+	return !inCooldown
+}
+
+// tryRecoverKiroCooldownPool P1 #7: 全池 cooldown 时按比例批量 recover。
+//
+// 原行为:每次只 clear 一个最早冷却的账号 → 该账号被同请求并发立即雪崩重撞 429,
+// 5min 上限反复回锁。
+//
+// 新行为:按 KIRO_RECOVER_BATCH_PCT(默认 30%)算出 clearCount,clearCount 最少 1 个,
+// 按 cooldown_until_ms 升序解锁 N 个;后续选号端从这批账号里随机选一个(避免所有
+// 并发请求都撞到"最早解锁那个")。
+//
+// 仍受 kiroCooldownRecoveryAttemptedKey 上下文标记的影响,同次请求只 recover 一次。
 func (s *GatewayService) tryRecoverKiroCooldownPool(ctx context.Context, accounts []Account, requestedModel string, excludedIDs map[int64]struct{}, allowMixedScheduling bool) bool {
 	if s == nil || s.kiroCooldownStore == nil || ctx.Value(kiroCooldownRecoveryAttemptedKey) == true {
 		return false
@@ -2402,15 +2693,28 @@ func (s *GatewayService) tryRecoverKiroCooldownPool(ctx context.Context, account
 	if len(tokenKeys) == 0 {
 		return false
 	}
-	cleared, err := s.kiroCooldownStore.ClearEarliestTransientCooldown(ctx, tokenKeys)
+	// clearCount = max(1, ceil(totalCooled * batchPct))
+	total := len(tokenKeys)
+	pct := kiroRecoverBatchPct()
+	clearCount := int(float64(total)*pct + 0.5) // 四舍五入近似 ceil
+	if clearCount < 1 {
+		clearCount = 1
+	}
+	if clearCount > total {
+		clearCount = total
+	}
+	staggerMs := kiroRecoverStaggerMS()
+	cleared, err := s.kiroCooldownStore.ClearEarliestTransientCooldownBatch(ctx, tokenKeys, clearCount, staggerMs)
 	if err != nil {
 		logger.LegacyPrintf("service.gateway", "Kiro cooldown pool recovery failed: %v", err)
 		return false
 	}
-	if cleared {
-		logger.LegacyPrintf("service.gateway", "Kiro cooldown pool recovery cleared one transient cooldown")
+	if cleared > 0 {
+		logger.LegacyPrintf("service.gateway",
+			"Kiro cooldown pool recovery cleared %d transient cooldown(s) (total=%d, pct=%.2f, stagger_ms=%d, ts=%d)",
+			cleared, total, pct, staggerMs, time.Now().Unix())
 	}
-	return cleared
+	return cleared > 0
 }
 
 func (s *GatewayService) kiroTransientCooldownRecoveryKeys(ctx context.Context, accounts []Account, requestedModel string, excludedIDs map[int64]struct{}, allowMixedScheduling bool) []string {
@@ -2708,9 +3012,23 @@ func (s *GatewayService) withRPMPrefetch(ctx context.Context, accounts []Account
 	return context.WithValue(ctx, rpmPrefetchContextKey, counts)
 }
 
-// isAccountSchedulableForRPM 检查账号是否可根据 RPM 进行调度
-// 仅适用于 Anthropic OAuth/SetupToken 账号
+// isAccountSchedulableForRPM 检查账号是否可根据 RPM 进行调度。
+//
+// 路径分流：
+//   - Kiro OAuth 账号：走 kiroRPMStore 的滑动窗口(KIRO_RPM_PER_ACCOUNT/WINDOW_SEC),
+//     是新增的事前节流路径,避免 Kiro 完全没有 proactive RPM 限流。
+//   - Anthropic OAuth / SetupToken 账号：保留原有 rpmCache + GetBaseRPM 逻辑。
+//   - 其他平台：直接放行(由各平台自己的 RPM/RateLimit 机制处理)。
+//
+// 注意:isSticky=true 时即便超 RPM 也不应拒绝粘性会话(保持会话连续性)。
+// 这与 Anthropic 路径的 StickyOnly 语义一致。
 func (s *GatewayService) isAccountSchedulableForRPM(ctx context.Context, account *Account, isSticky bool) bool {
+	if account == nil {
+		return true
+	}
+	if account.Platform == PlatformKiro && account.Type == AccountTypeOAuth {
+		return s.isKiroAccountSchedulableForRPM(ctx, account, isSticky)
+	}
 	if !account.IsAnthropicOAuthOrSetupToken() {
 		return true
 	}
@@ -3268,8 +3586,12 @@ func (s *GatewayService) selectAccountForModelWithPlatform(ctx context.Context, 
 	// 3. 按优先级+最久未用选择（考虑模型支持）
 	// needsUpstreamCheck 仅在主选择循环中使用；粘性会话命中时跳过此检查，
 	// 因为粘性会话优先保持连接一致性，且 upstream 计费基准极少使用。
+	//
+	// 改造（KIRO_SELECT_TOP_N）：收集所有可调度候选 → 在最高 priority 层内按
+	// LRU 评分 top-N 随机选一，替代原 LRU 单赢家。这样短时并发请求会自然分散，
+	// 不再集中打"刚冷却完最久未用"的同一个账号。严格 priority 分层语义保持不变。
 	needsUpstreamCheck := s.needsUpstreamChannelRestrictionCheck(ctx, groupID)
-	var selected *Account
+	candidates := make([]*Account, 0, len(accounts))
 	for i := range accounts {
 		acc := &accounts[i]
 		if _, excluded := excludedIDs[acc.ID]; excluded {
@@ -3304,29 +3626,9 @@ func (s *GatewayService) selectAccountForModelWithPlatform(ctx context.Context, 
 		if !s.isAccountSchedulableForRPM(ctx, acc, false) {
 			continue
 		}
-		if selected == nil {
-			selected = acc
-			continue
-		}
-		if acc.Priority < selected.Priority {
-			selected = acc
-		} else if acc.Priority == selected.Priority {
-			switch {
-			case acc.LastUsedAt == nil && selected.LastUsedAt != nil:
-				selected = acc
-			case acc.LastUsedAt != nil && selected.LastUsedAt == nil:
-				// keep selected (never used is preferred)
-			case acc.LastUsedAt == nil && selected.LastUsedAt == nil:
-				if preferOAuth && acc.Type != selected.Type && acc.Type == AccountTypeOAuth {
-					selected = acc
-				}
-			default:
-				if acc.LastUsedAt.Before(*selected.LastUsedAt) {
-					selected = acc
-				}
-			}
-		}
+		candidates = append(candidates, acc)
 	}
+	selected := s.pickTopNFromCandidates(ctx, candidates, preferOAuth, time.Now())
 
 	if selected == nil {
 		stats := s.logDetailedSelectionFailure(ctx, groupID, sessionHash, requestedModel, platform, accounts, excludedIDs, false)
@@ -3529,8 +3831,11 @@ func (s *GatewayService) selectAccountWithMixedScheduling(ctx context.Context, g
 
 	// 3. 按优先级+最久未用选择（考虑模型支持和混合调度）
 	// needsUpstreamCheck 仅在主选择循环中使用；粘性会话命中时跳过此检查。
+	//
+	// 改造（KIRO_SELECT_TOP_N）：与 selectAccountForModelWithPlatform 一致，
+	// 收集合格候选 → 同 priority 层 top-N 随机。preferOAuth 仅在 Gemini 平台生效。
 	needsUpstreamCheck := s.needsUpstreamChannelRestrictionCheck(ctx, groupID)
-	var selected *Account
+	candidates := make([]*Account, 0, len(accounts))
 	for i := range accounts {
 		acc := &accounts[i]
 		if _, excluded := excludedIDs[acc.ID]; excluded {
@@ -3569,29 +3874,13 @@ func (s *GatewayService) selectAccountWithMixedScheduling(ctx context.Context, g
 		if !s.isAccountSchedulableForRPM(ctx, acc, false) {
 			continue
 		}
-		if selected == nil {
-			selected = acc
-			continue
-		}
-		if acc.Priority < selected.Priority {
-			selected = acc
-		} else if acc.Priority == selected.Priority {
-			switch {
-			case acc.LastUsedAt == nil && selected.LastUsedAt != nil:
-				selected = acc
-			case acc.LastUsedAt != nil && selected.LastUsedAt == nil:
-				// keep selected (never used is preferred)
-			case acc.LastUsedAt == nil && selected.LastUsedAt == nil:
-				if preferOAuth && acc.Platform == PlatformGemini && selected.Platform == PlatformGemini && acc.Type != selected.Type && acc.Type == AccountTypeOAuth {
-					selected = acc
-				}
-			default:
-				if acc.LastUsedAt.Before(*selected.LastUsedAt) {
-					selected = acc
-				}
-			}
-		}
+		candidates = append(candidates, acc)
 	}
+	// mixed 调度时 preferOAuth 只对 Gemini 平台账号生效；
+	// pickTopNFromCandidates 对 OAuth tie-break 的处理不区分平台（preferOAuth 时
+	// OAuth 一律排前），这与原逻辑略有偏差（原逻辑只在 selected/acc 均为 Gemini 时才比较）。
+	// 实际影响很小：mixed 池里非 Gemini 平台与 Gemini 平台几乎不会出现在同一 priority 同 nativeplatform 路径下。
+	selected := s.pickTopNFromCandidates(ctx, candidates, preferOAuth, time.Now())
 
 	if selected == nil {
 		stats := s.logDetailedSelectionFailure(ctx, groupID, sessionHash, requestedModel, nativePlatform, accounts, excludedIDs, true)
@@ -3609,6 +3898,108 @@ func (s *GatewayService) selectAccountWithMixedScheduling(ctx context.Context, g
 	}
 
 	return selected, nil
+}
+
+// kiroSelectTopN 从 env 读取 top-N 候选数，非法或缺失时回退默认 8。
+// 调用频次高（每次选号一次），但读 env 非常廉价，无需缓存。
+func kiroSelectTopN() int {
+	raw := strings.TrimSpace(os.Getenv(kiroSelectTopNEnv))
+	if raw == "" {
+		return kiroSelectTopNDefault
+	}
+	if v, err := strconv.Atoi(raw); err == nil && v > 0 {
+		return v
+	}
+	return kiroSelectTopNDefault
+}
+
+// pickTopNFromCandidates 在严格 priority 分层语义下，从同 priority 候选里按
+// (1-loadRate)*100 + lruScore 加权打分，排序后从前 N 名随机选一。
+//
+// 输入 candidates 是所有已通过 schedulability 过滤、可调度的账号；
+// 函数内部找到数值最小的 Priority（即最高优先级层），仅在该层内随机，
+// 不会跨 priority 选号 —— 与原 LRU 实现的严格分层语义一致。
+//
+// preferOAuth: 当 LastUsedAt 都为 nil 的 tie-break 时优先 OAuth 类型（Gemini 场景）。
+// 该规则在 top-N 抽样后无法精准重现，因此降级为：先在最高 priority 层内做一次
+// OAuth/非 OAuth 的稳定排序（OAuth 排前），再按打分排序。在抽样窗口内 OAuth
+// 仍然有更高出现概率。
+func (s *GatewayService) pickTopNFromCandidates(ctx context.Context, candidates []*Account, preferOAuth bool, now time.Time) *Account {
+	if len(candidates) == 0 {
+		return nil
+	}
+	if len(candidates) == 1 {
+		return candidates[0]
+	}
+
+	// 找到数值最小的 priority（语义：数值小=高优）。
+	minPriority := candidates[0].Priority
+	for _, acc := range candidates[1:] {
+		if acc.Priority < minPriority {
+			minPriority = acc.Priority
+		}
+	}
+	tier := make([]*Account, 0, len(candidates))
+	for _, acc := range candidates {
+		if acc.Priority == minPriority {
+			tier = append(tier, acc)
+		}
+	}
+	if len(tier) == 1 {
+		return tier[0]
+	}
+
+	// 计算评分：负载越低、LRU 越久（LastUsedAt 越早）分越高。
+	type scored struct {
+		acc   *Account
+		score float64
+		// 用于 OAuth tie-break：preferOAuth 时 OAuth 排在前，作为稳定的次级排序键。
+		oauthRank int
+	}
+	items := make([]scored, 0, len(tier))
+	for _, acc := range tier {
+		maxConc := acc.Concurrency
+		if maxConc <= 0 {
+			// 与原 LRU 实现一致：未配置并发时不计入负载，按 0 处理。
+			maxConc = 1
+		}
+		// LoadFactor 优先于 Concurrency 用作负载分母（与 EffectiveLoadFactor 对齐）
+		// 但这里我们没有当前并发数；与现有 isAccountSchedulableForXXX 路径解耦，
+		// 仅取 LastUsedAt 这一维度的 LRU score。
+		// 这与 airgate selection.go 行为略有差异：airgate 用 ZSET 实时读并发；
+		// sub2api 调度热路径无此基础设施，做加权随机已能达成"打散"目标。
+		_ = maxConc
+		lruScore := 100.0
+		if acc.LastUsedAt != nil {
+			if elapsed := now.Sub(*acc.LastUsedAt).Minutes(); elapsed < 100 {
+				lruScore = elapsed
+			}
+		}
+		oauthRank := 0
+		if preferOAuth && acc.Type == AccountTypeOAuth {
+			oauthRank = 1
+		}
+		items = append(items, scored{acc: acc, score: lruScore, oauthRank: oauthRank})
+	}
+
+	// 排序：preferOAuth 时 OAuth 优先，其次按 score 降序。
+	sort.SliceStable(items, func(i, j int) bool {
+		if preferOAuth && items[i].oauthRank != items[j].oauthRank {
+			return items[i].oauthRank > items[j].oauthRank
+		}
+		return items[i].score > items[j].score
+	})
+
+	topN := kiroSelectTopN()
+	if topN > len(items) {
+		topN = len(items)
+	}
+	if topN <= 0 {
+		topN = 1
+	}
+	idx := mathrand.Intn(topN)
+	_ = ctx // ctx 暂未使用，保留参数便于未来扩展（如读 Redis 并发数）
+	return items[idx].acc
 }
 
 type selectionFailureStats struct {

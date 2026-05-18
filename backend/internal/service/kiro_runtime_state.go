@@ -7,6 +7,10 @@ import (
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/kirocooldown"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/kiroerrors"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/kirofamily"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
+	"go.uber.org/zap"
 )
 
 var errKiroCooldownStoreUnavailable = errors.New("kiro cooldown store unavailable")
@@ -18,6 +22,11 @@ type KiroCooldownStore interface {
 	MarkSuspended(ctx context.Context, tokenKey string) (time.Duration, error)
 	GetState(ctx context.Context, tokenKey string) (*kirocooldown.State, error)
 	ClearEarliestTransientCooldown(ctx context.Context, tokenKeys []string) (bool, error)
+	// P1 #7: 按 cooldown_until_ms 升序 clear 最早冷却的 maxClear 个 429-transient 账号,
+	// 用于全池冷却时一次性批量解锁,避免单 clear 导致解锁账号立即雪崩。
+	// staggerStepMs > 0 时,第 i 个账号 (i>=1) 解锁延迟 = i*staggerStepMs*(1±15%);
+	// staggerStepMs <=0 时退化为"全部立即放行"。
+	ClearEarliestTransientCooldownBatch(ctx context.Context, tokenKeys []string, maxClear int, staggerStepMs int64) (int, error)
 }
 
 func asKiroCooldownFailoverError(err error) *UpstreamFailoverError {
@@ -69,6 +78,60 @@ func (s *GatewayService) markKiro429(ctx context.Context, tokenKey string) (time
 		return 0, errKiroCooldownStoreUnavailable
 	}
 	return s.kiroCooldownStore.Mark429(ctx, tokenKey)
+}
+
+// markKiro429WithFamily P1 #5+#8: 同时 mark 账号级 cooldown 和 family 级 cooldown。
+//
+// 流程:
+//  1. 账号级 mark(沿用 P0 #4 的衰减 + 抖动 Lua) —— 让该账号短期不再被调度
+//  2. 解析上游 Retry-After(优先)/ 默认 KIRO_FAMILY_COOLDOWN_DEFAULT_S
+//  3. 应用 min/max 兜底(P1 #8)
+//  4. 标 family cooldown(P1 #5) —— 只锁住对应 model,其他 model 仍可用
+//
+// 即使 family cooldown 失败 / 关闭,账号级仍然生效,行为退化到 P0。
+// account 为 nil 时仅做账号级 mark,保持向后兼容。
+func (s *GatewayService) markKiro429WithFamily(
+	ctx context.Context,
+	account *Account,
+	tokenKey string,
+	mappedModel string,
+	respHeader http.Header,
+	respBody []byte,
+) (time.Duration, error) {
+	// 1. 账号级 (P0)
+	accountCD, err := s.markKiro429(ctx, tokenKey)
+	if err != nil {
+		return 0, err
+	}
+
+	// 2. family 级 (P1 #5)
+	if account == nil || s.kiroFamilyCooldown == nil {
+		return accountCD, nil
+	}
+	family := kirofamily.FamilyKey(mappedModel)
+	if family == "" {
+		return accountCD, nil
+	}
+
+	// 3. Retry-After 解析(P1 #8)
+	var familyDur time.Duration
+	if d, ok := kiroerrors.ParseRetryAfter(respHeader); ok {
+		familyDur = d
+	} else if d, ok := kiroerrors.ParseRetryAfterFromBody(respBody); ok {
+		familyDur = d
+	} else {
+		familyDur = kiroFamilyCooldownDefault()
+	}
+	familyDur = kiroerrors.ApplyRetryAfterBounds(familyDur, kiroRetryAfterMinMS(), kiroRetryAfterMaxS())
+
+	s.kiroFamilyCooldown.Mark(ctx, account.ID, family, familyDur, kirocooldown.CooldownReason429)
+	logger.L().Info("kiro family cooldown marked",
+		zap.Int64("account_id", account.ID),
+		zap.String("family", family),
+		zap.Duration("family_cooldown", familyDur),
+		zap.Duration("account_cooldown", accountCD),
+	)
+	return accountCD, nil
 }
 
 func (s *GatewayService) markKiroSuspended(ctx context.Context, tokenKey string) (time.Duration, error) {

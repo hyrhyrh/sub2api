@@ -166,6 +166,8 @@ func newTestGatewayHandler(t *testing.T, group *service.Group, accounts []*servi
 		nil, // claudeTokenProvider
 		nil, // kiroTokenProvider
 		nil, // kiroCooldownStore
+		nil, // kiroRPMStore (P0 #2)
+		nil, // kiroFamilyCooldown (P1 #5)
 		nil, // sessionLimitCache
 		nil, // rpmCache
 		nil, // digestStore

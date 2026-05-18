@@ -10,6 +10,8 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/payment"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/antigravity"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/kirocooldown"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/kirofamily"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/kirorpm"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/google/wire"
 	"github.com/redis/go-redis/v9"
@@ -146,6 +148,19 @@ func ProvideKiroTokenProvider(
 
 func ProvideKiroCooldownStore(redisClient *redis.Client) KiroCooldownStore {
 	return kirocooldown.NewStore(redisClient)
+}
+
+// ProvideKiroRPMStore 构造 Kiro 平台 RPM 滑动窗口限流 store。
+// 窗口长度从 env KIRO_RPM_WINDOW_SEC 读取(默认 60)。
+func ProvideKiroRPMStore(redisClient *redis.Client) *kirorpm.Store {
+	return kirorpm.NewStore(redisClient, kiroRPMWindowSec())
+}
+
+// ProvideKiroFamilyCooldownStore 构造 (Kiro account, model family) 维度的冷却 store。
+// P1 #5: 让 Sonnet 撞 429 时,Opus/Haiku 在同账号上仍可用,贴近 Kiro 后端
+// 按 model/token 维度限流的真实行为。redisClient=nil 时 store 退化为 no-op (fail-open)。
+func ProvideKiroFamilyCooldownStore(redisClient *redis.Client) *kirofamily.Store {
+	return kirofamily.NewStore(redisClient)
 }
 
 // ProvideDashboardAggregationService 创建并启动仪表盘聚合服务
@@ -481,6 +496,8 @@ var ProviderSet = wire.NewSet(
 	ProvideGeminiTokenProvider,
 	ProvideKiroTokenProvider,
 	ProvideKiroCooldownStore,
+	ProvideKiroRPMStore,
+	ProvideKiroFamilyCooldownStore,
 	NewGeminiMessagesCompatService,
 	ProvideAntigravityTokenProvider,
 	ProvideOpenAITokenProvider,
