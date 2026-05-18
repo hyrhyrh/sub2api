@@ -22,6 +22,11 @@ type KiroCooldownStore interface {
 	MarkSuspended(ctx context.Context, tokenKey string) (time.Duration, error)
 	GetState(ctx context.Context, tokenKey string) (*kirocooldown.State, error)
 	ClearEarliestTransientCooldown(ctx context.Context, tokenKeys []string) (bool, error)
+	// P1 #7: 按 cooldown_until_ms 升序 clear 最早冷却的 maxClear 个 429-transient 账号,
+	// 用于全池冷却时一次性批量解锁,避免单 clear 导致解锁账号立即雪崩。
+	// staggerStepMs > 0 时,第 i 个账号 (i>=1) 解锁延迟 = i*staggerStepMs*(1±15%);
+	// staggerStepMs <=0 时退化为"全部立即放行"。
+	ClearEarliestTransientCooldownBatch(ctx context.Context, tokenKeys []string, maxClear int, staggerStepMs int64) (int, error)
 }
 
 func asKiroCooldownFailoverError(err error) *UpstreamFailoverError {

@@ -431,9 +431,34 @@ func (s *Store) GetState(ctx context.Context, tokenKey string) (*State, error) {
 	}, nil
 }
 
+// ClearEarliestTransientCooldown 仅 clear 一个最早冷却的 transient(429)账号。
+// 保留是为了向后兼容老的调用方;新代码请用 ClearEarliestTransientCooldownBatch。
 func (s *Store) ClearEarliestTransientCooldown(ctx context.Context, tokenKeys []string) (bool, error) {
+	n, err := s.ClearEarliestTransientCooldownBatch(ctx, tokenKeys, 1, 0)
+	return n > 0, err
+}
+
+// ClearEarliestTransientCooldownBatch 按 cooldown_until_ms 升序 clear / 提前到期最早冷却的
+// maxClear 个 429-transient 账号。返回真正释放的数量。
+//
+// P1 #7: 原 ClearEarliestTransientCooldown 一次只解锁一个最早冷却,该账号被同请求 / 并发请求
+// 立即雪崩重撞 429,5min 上限反复回锁。改为按比例(默认 30%)批量解锁后,
+// 选号端再在这批账号里随机选,既打破"立即雪崩"也保持"优先解锁最早冷却"的公平性。
+//
+// 当 staggerStepMs > 0 时,按索引在每个账号上加 (i * staggerStepMs) * (1 ± 15%) 的解锁
+// 延迟(同 P0 #4 的 KIRO_COOLDOWN_JITTER_PCT 抖动),让多个账号错峰解锁而不是同时回锁:
+//   - 第 1 个(i=0)立即解锁:cooldown_until_ms 字段直接 HDel
+//   - 第 i 个(i>=1)cooldown_until_ms 被写成 now + (i * staggerStepMs) * jitterFactor
+//     而不是 HDel —— 调度逻辑会自然把它当成"还在小冷却",到点后自动可调度
+//
+// staggerStepMs <= 0 时退化为"全部立即解锁",jitter 不生效。
+// maxClear <= 0 / 候选不足时取实际数量。pipeline 失败时返回错误(尽量不静默)。
+func (s *Store) ClearEarliestTransientCooldownBatch(ctx context.Context, tokenKeys []string, maxClear int, staggerStepMs int64) (int, error) {
 	if err := s.validate(); err != nil {
-		return false, err
+		return 0, err
+	}
+	if maxClear <= 0 {
+		return 0, nil
 	}
 	uniqueKeys := make([]string, 0, len(tokenKeys))
 	seen := make(map[string]struct{}, len(tokenKeys))
@@ -450,7 +475,7 @@ func (s *Store) ClearEarliestTransientCooldown(ctx context.Context, tokenKeys []
 		uniqueKeys = append(uniqueKeys, redisKey)
 	}
 	if len(uniqueKeys) == 0 {
-		return false, nil
+		return 0, nil
 	}
 
 	cacheCtx, cancel := withRedisTimeout(ctx)
@@ -462,7 +487,7 @@ func (s *Store) ClearEarliestTransientCooldown(ctx context.Context, tokenKeys []
 		failCount       int64
 	}
 	now := time.Now().UnixMilli()
-	var best *candidate
+	candidates := make([]candidate, 0, len(uniqueKeys))
 
 	pipe := s.client.Pipeline()
 	cmds := make([]*redis.SliceCmd, 0, len(uniqueKeys))
@@ -470,50 +495,94 @@ func (s *Store) ClearEarliestTransientCooldown(ctx context.Context, tokenKeys []
 		cmds = append(cmds, pipe.HMGet(cacheCtx, redisKey, "cooldown_until_ms", "cooldown_reason", "fail_count"))
 	}
 	if _, err := pipe.Exec(cacheCtx); err != nil {
-		return false, fmt.Errorf("kiro cooldown clear transient scan: %w", err)
+		return 0, fmt.Errorf("kiro cooldown clear transient scan: %w", err)
 	}
 
 	for i, cmd := range cmds {
 		values, err := cmd.Result()
 		if err != nil {
-			return false, fmt.Errorf("kiro cooldown clear transient state: %w", err)
+			return 0, fmt.Errorf("kiro cooldown clear transient state: %w", err)
 		}
 		if len(values) != 3 {
-			return false, fmt.Errorf("kiro cooldown clear transient state: unexpected response length %d", len(values))
+			return 0, fmt.Errorf("kiro cooldown clear transient state: unexpected response length %d", len(values))
 		}
 		cooldownUntilMS, err := luaInt64(values[0])
 		if err != nil && values[0] != nil {
-			return false, fmt.Errorf("kiro cooldown clear transient cooldown_until_ms: %w", err)
+			return 0, fmt.Errorf("kiro cooldown clear transient cooldown_until_ms: %w", err)
 		}
 		reason, err := luaString(values[1])
 		if err != nil {
-			return false, fmt.Errorf("kiro cooldown clear transient reason: %w", err)
+			return 0, fmt.Errorf("kiro cooldown clear transient reason: %w", err)
 		}
 		failCount, err := luaInt64(values[2])
 		if err != nil && values[2] != nil {
-			return false, fmt.Errorf("kiro cooldown clear transient fail_count: %w", err)
+			return 0, fmt.Errorf("kiro cooldown clear transient fail_count: %w", err)
 		}
 		if cooldownUntilMS <= now || reason != CooldownReason429 {
 			continue
 		}
-		current := &candidate{redisKey: uniqueKeys[i], cooldownUntilMS: cooldownUntilMS, failCount: failCount}
-		if best == nil ||
-			current.cooldownUntilMS < best.cooldownUntilMS ||
-			(current.cooldownUntilMS == best.cooldownUntilMS && current.failCount < best.failCount) {
-			best = current
-		}
+		candidates = append(candidates, candidate{redisKey: uniqueKeys[i], cooldownUntilMS: cooldownUntilMS, failCount: failCount})
 	}
-	if best == nil {
-		return false, nil
+	if len(candidates) == 0 {
+		return 0, nil
 	}
 
-	if err := s.client.HDel(cacheCtx, best.redisKey, "cooldown_until_ms", "cooldown_reason").Err(); err != nil {
-		return false, fmt.Errorf("kiro cooldown clear transient: %w", err)
+	// 按 (cooldown_until_ms ASC, fail_count ASC) 排序:先解锁最早冷却 + fail 计数最少的。
+	// 不用 sort.Slice 避免 import 一长串,N 通常 <= 50,选择排序 O(N*maxClear) 即可。
+	if maxClear > len(candidates) {
+		maxClear = len(candidates)
 	}
-	if err := s.client.Expire(cacheCtx, best.redisKey, activeTTL).Err(); err != nil {
-		return false, fmt.Errorf("kiro cooldown clear transient ttl: %w", err)
+	for i := 0; i < maxClear; i++ {
+		minIdx := i
+		for j := i + 1; j < len(candidates); j++ {
+			if candidates[j].cooldownUntilMS < candidates[minIdx].cooldownUntilMS ||
+				(candidates[j].cooldownUntilMS == candidates[minIdx].cooldownUntilMS && candidates[j].failCount < candidates[minIdx].failCount) {
+				minIdx = j
+			}
+		}
+		if minIdx != i {
+			candidates[i], candidates[minIdx] = candidates[minIdx], candidates[i]
+		}
 	}
-	return true, nil
+
+	// 按索引算 stagger-with-jitter:第 i 个账号在 now + (i * staggerStepMs) * (1 ± 15%) 后解锁。
+	// 第 0 个 staggerDelay=0 → HDel 立即释放;其余 HSet 一个临近未来时间(仍在 429 cooldown
+	// 语义下,调度逻辑用 cooldown_until_ms <= now 判断可用)。
+	// rng / rngMu 与 P0 #4 cooldown 抖动复用,无需新加同步原语。
+	jitterPct := cooldownJitterPct()
+	clearPipe := s.client.Pipeline()
+	released := 0
+	for i := 0; i < maxClear; i++ {
+		var staggerMs int64
+		if i > 0 && staggerStepMs > 0 {
+			factor := 1.0
+			if jitterPct > 0 {
+				s.rngMu.Lock()
+				factor = 1.0 + (s.rng.Float64()*2-1)*jitterPct
+				s.rngMu.Unlock()
+				if factor <= 0 {
+					factor = 0.01
+				}
+			}
+			staggerMs = int64(float64(i) * float64(staggerStepMs) * factor)
+		}
+		if staggerMs <= 0 {
+			// 立即释放
+			clearPipe.HDel(cacheCtx, candidates[i].redisKey, "cooldown_until_ms", "cooldown_reason")
+			clearPipe.Expire(cacheCtx, candidates[i].redisKey, activeTTL)
+		} else {
+			// 错峰释放:把 cooldown_until_ms 提前到 now + staggerMs。reason 保持 429,
+			// fail_count 不重置(待真正成功再 MarkSuccess 清零),仍走 P0 #4 衰减路径。
+			newUntil := now + staggerMs
+			clearPipe.HSet(cacheCtx, candidates[i].redisKey, "cooldown_until_ms", newUntil)
+			clearPipe.Expire(cacheCtx, candidates[i].redisKey, activeTTL)
+		}
+		released++
+	}
+	if _, err := clearPipe.Exec(cacheCtx); err != nil {
+		return 0, fmt.Errorf("kiro cooldown clear transient batch: %w", err)
+	}
+	return released, nil
 }
 
 func RedisKey(tokenKey string) string {

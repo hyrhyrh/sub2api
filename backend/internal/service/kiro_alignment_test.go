@@ -42,6 +42,11 @@ func (s *kiroUsageCooldownStore) ClearEarliestTransientCooldown(context.Context,
 	return false, nil
 }
 
+// P1 #7: 批量 clear API。测试 mock 返回 0 即可。
+func (s *kiroUsageCooldownStore) ClearEarliestTransientCooldownBatch(context.Context, []string, int, int64) (int, error) {
+	return 0, nil
+}
+
 func kiroFloatPtr(v float64) *float64 {
 	return &v
 }

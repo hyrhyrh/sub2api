@@ -101,6 +101,19 @@ const (
 	kiroFamilyCooldownDefaultEnv     = "KIRO_FAMILY_COOLDOWN_DEFAULT_S"
 	kiroFamilyCooldownDefaultSeconds = 60
 
+	// P1 #7: 全池 cooldown 时一次性 recover 的比例 (0.0~1.0)。默认 0.3 = 30%。
+	// 现有 tryRecoverKiroCooldownPool 每次只 clear 一个最早冷却账号,
+	// 该账号被立即打雪崩。改为按比例批量解锁后,选号端再随机选一个,避免惊群。
+	kiroRecoverBatchPctEnv     = "KIRO_RECOVER_BATCH_PCT"
+	kiroRecoverBatchPctDefault = 0.3
+
+	// P1 #7: 批量 recover 时账号之间的错峰解锁基础步长(毫秒)。默认 500ms。
+	// 实际解锁延迟 = i * staggerStepMs * (1 ± 15%),i 从 0 开始 → 第一个立即放行,
+	// 后续账号错峰恢复,避免"刚解锁就一起被并发请求打回 cooldown"。<=0 时退化为
+	// 全部立即放行(完全退回 P0 行为)。与 P0 #4 共享 KIRO_COOLDOWN_JITTER_PCT 抖动幅度。
+	kiroRecoverStaggerMSEnv     = "KIRO_RECOVER_STAGGER_MS"
+	kiroRecoverStaggerMSDefault = 500
+
 	// P1 #8: Retry-After 解析的最小/最大兜底 (毫秒/秒)。
 	// 最小 200ms:上游可能返回 15-50ms 这种瞬时值,跟着会让账号刚解锁就撞墙。
 	// 最大 7 天:防异常值;Kiro OAuth 的 monthly_request_count 走另一条专用路径(reset 到下月 1 号)。
@@ -173,6 +186,34 @@ func kiroFamilyCooldownDefault() time.Duration {
 		return time.Duration(v) * time.Second
 	}
 	return time.Duration(kiroFamilyCooldownDefaultSeconds) * time.Second
+}
+
+// kiroRecoverBatchPct 从 env 读取 cooldown 批量 recover 比例。
+// <=0 / >1 / 非数字 回退默认 0.3。返回值范围限定 (0, 1]。
+func kiroRecoverBatchPct() float64 {
+	raw := strings.TrimSpace(os.Getenv(kiroRecoverBatchPctEnv))
+	if raw == "" {
+		return kiroRecoverBatchPctDefault
+	}
+	v, err := strconv.ParseFloat(raw, 64)
+	if err != nil || v <= 0 || v > 1 {
+		return kiroRecoverBatchPctDefault
+	}
+	return v
+}
+
+// kiroRecoverStaggerMS 从 env 读取批量 recover 错峰步长(毫秒)。
+// 负值 / 非数字 回退默认 500;返回 0 表示禁用错峰(全部立即放行)。
+func kiroRecoverStaggerMS() int64 {
+	raw := strings.TrimSpace(os.Getenv(kiroRecoverStaggerMSEnv))
+	if raw == "" {
+		return int64(kiroRecoverStaggerMSDefault)
+	}
+	v, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || v < 0 {
+		return int64(kiroRecoverStaggerMSDefault)
+	}
+	return v
 }
 
 // kiroRetryAfterMinMS 从 env 读取 Retry-After 最小兜底毫秒。<=0 回退默认 200。
@@ -2634,6 +2675,16 @@ func (s *GatewayService) isKiroRuntimeSchedulableForModel(ctx context.Context, a
 	return !inCooldown
 }
 
+// tryRecoverKiroCooldownPool P1 #7: 全池 cooldown 时按比例批量 recover。
+//
+// 原行为:每次只 clear 一个最早冷却的账号 → 该账号被同请求并发立即雪崩重撞 429,
+// 5min 上限反复回锁。
+//
+// 新行为:按 KIRO_RECOVER_BATCH_PCT(默认 30%)算出 clearCount,clearCount 最少 1 个,
+// 按 cooldown_until_ms 升序解锁 N 个;后续选号端从这批账号里随机选一个(避免所有
+// 并发请求都撞到"最早解锁那个")。
+//
+// 仍受 kiroCooldownRecoveryAttemptedKey 上下文标记的影响,同次请求只 recover 一次。
 func (s *GatewayService) tryRecoverKiroCooldownPool(ctx context.Context, accounts []Account, requestedModel string, excludedIDs map[int64]struct{}, allowMixedScheduling bool) bool {
 	if s == nil || s.kiroCooldownStore == nil || ctx.Value(kiroCooldownRecoveryAttemptedKey) == true {
 		return false
@@ -2642,15 +2693,28 @@ func (s *GatewayService) tryRecoverKiroCooldownPool(ctx context.Context, account
 	if len(tokenKeys) == 0 {
 		return false
 	}
-	cleared, err := s.kiroCooldownStore.ClearEarliestTransientCooldown(ctx, tokenKeys)
+	// clearCount = max(1, ceil(totalCooled * batchPct))
+	total := len(tokenKeys)
+	pct := kiroRecoverBatchPct()
+	clearCount := int(float64(total)*pct + 0.5) // 四舍五入近似 ceil
+	if clearCount < 1 {
+		clearCount = 1
+	}
+	if clearCount > total {
+		clearCount = total
+	}
+	staggerMs := kiroRecoverStaggerMS()
+	cleared, err := s.kiroCooldownStore.ClearEarliestTransientCooldownBatch(ctx, tokenKeys, clearCount, staggerMs)
 	if err != nil {
 		logger.LegacyPrintf("service.gateway", "Kiro cooldown pool recovery failed: %v", err)
 		return false
 	}
-	if cleared {
-		logger.LegacyPrintf("service.gateway", "Kiro cooldown pool recovery cleared one transient cooldown")
+	if cleared > 0 {
+		logger.LegacyPrintf("service.gateway",
+			"Kiro cooldown pool recovery cleared %d transient cooldown(s) (total=%d, pct=%.2f, stagger_ms=%d, ts=%d)",
+			cleared, total, pct, staggerMs, time.Now().Unix())
 	}
-	return cleared
+	return cleared > 0
 }
 
 func (s *GatewayService) kiroTransientCooldownRecoveryKeys(ctx context.Context, accounts []Account, requestedModel string, excludedIDs map[int64]struct{}, allowMixedScheduling bool) []string {
