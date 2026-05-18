@@ -13,6 +13,7 @@ import (
 	"time"
 
 	kiropkg "github.com/Wei-Shaw/sub2api/internal/pkg/kiro"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/kiroerrors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/gin-gonic/gin"
 	"github.com/tidwall/gjson"
@@ -725,6 +726,42 @@ func (s *GatewayService) handleKiroHTTPError(ctx context.Context, resp *http.Res
 	if resp.StatusCode == http.StatusBadRequest {
 		logKiroBadRequestClassification(classification, account, "", resp.Header, respBody)
 	}
+
+	// P1 #6: 错误二分类 — Fatal 早判定。
+	// 400 + context length 超限切到下一个账号也救不了,直接走"返客户端"路径,
+	// 不调 rateLimitService.HandleUpstreamError (避免误标账号 fail_count),
+	// 不触发 service 层 / handler 层切号。
+	if broadClass, broadReason := kiroerrors.Classify(resp.StatusCode, respBody); broadClass == kiroerrors.ClassFatal {
+		var accID int64
+		if account != nil {
+			accID = account.ID
+		}
+		logger.L().Info("kiro upstream fatal (no failover, no cooldown)",
+			zap.Int("status", resp.StatusCode),
+			zap.String("reason", broadReason),
+			zap.Int64("account_id", accID),
+			zap.String("mapped_model", mappedModel),
+		)
+		setOpsUpstreamError(c, resp.StatusCode, upstreamMsg, "")
+		appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
+			Platform:           account.Platform,
+			AccountID:          account.ID,
+			AccountName:        account.Name,
+			UpstreamStatusCode: resp.StatusCode,
+			UpstreamRequestID:  resp.Header.Get("x-request-id"),
+			Kind:               "fatal",
+			Message:            upstreamMsg,
+		})
+		c.JSON(mapUpstreamStatusCode(resp.StatusCode), gin.H{
+			"type": "error",
+			"error": gin.H{
+				"type":    "upstream_error",
+				"message": coalesceKiroErrorMessage(resp.StatusCode, upstreamMsg),
+			},
+		})
+		return fmt.Errorf("kiro fatal: %d %s (%s)", resp.StatusCode, upstreamMsg, broadReason)
+	}
+
 	if classification.Category == kiroErrorMonthlyRequest {
 		s.markKiroMonthlyRequestCountRateLimited(ctx, account, string(respBody))
 	}
