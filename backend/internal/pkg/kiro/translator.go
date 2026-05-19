@@ -27,13 +27,7 @@ const (
 	thinkingStartTag           = "<thinking>"
 	thinkingEndTag             = "</thinking>"
 	embeddedToolCallPrefix     = "[Called "
-	// kiroMinReasoningEmitChars: Kiro 单次 reasoningContentEvent 内容很短时,
-	// 立即 emit thinking block 会反复 closeText 把 text content_block 切碎,
-	// 客户端(如 Claude Code 控制台)逐 block 渲染出现 's 'm 等 BPE 碎片单独成段。
-	// 改为先 buffer reasoning,累积达到该阈值才正式 emit thinking block。
-	// 累积不到该阈值且流结束时,丢弃 reasoning(claude code 本就不显示 thinking)。
-	kiroMinReasoningEmitChars = 200
-	minFrameSize              = 16
+	minFrameSize               = 16
 	maxEventMsgSize            = 10 << 20
 	writeToolDescriptionSuffix = "IMPORTANT: If the content to write exceeds 150 lines, write only the first 50 lines with this tool, then append the remaining content using Edit calls in chunks of no more than 50 lines. Use a unique placeholder if needed. Do not write the whole file in one call."
 	editToolDescriptionSuffix  = "IMPORTANT: If new content exceeds 50 lines, split it into multiple Edit calls, replacing or appending no more than 50 lines per call. If appending, use a unique placeholder and remove it in the final chunk."
@@ -391,10 +385,13 @@ func StreamEventStreamAsAnthropicWithContext(ctx context.Context, body io.Reader
 	inThinkingBlock := false
 	stripThinkingLeadingNewline := false
 	sawNonThinkingBlock := false
-	// reasoningBuffer 累积上游 reasoningContentEvent 内容,避免每个短 reasoning
-	// 单独触发 thinking block 切碎 text block。见 kiroMinReasoningEmitChars。
-	reasoningBuffer := strings.Builder{}
-	reasoningEmitted := false
+	// gotAssistantText: 第一次出现非空 assistantResponseEvent.content 即置 true。
+	// 用于判定"text 已开始":比 sawNonThinkingBlock 更早,后者要等 emitTextDelta 真发出
+	// content_block_delta 才置位,而 processThinkingTaggedText 会把短 text(< len("<thinking>"))
+	// buffer 住等下一帧 → 此时 sawNonThinkingBlock 仍是 false。如果用 sawNonThinkingBlock
+	// 判断,会把"已经到达过 assistant text 之后"的 reasoning 误判成"开场 thinking"而 emit,
+	// 引发 closeText 切碎(Claude Code 'we 're 'm 单独成 ●)。
+	gotAssistantText := false
 
 	writeEvent := func(event string, data any) error {
 		payload, err := json.Marshal(data)
@@ -871,6 +868,7 @@ func StreamEventStreamAsAnthropicWithContext(ctx context.Context, body io.Reader
 				text = getString(event, "content")
 			}
 			if text != "" {
+				gotAssistantText = true
 				if requestCtx.ThinkingEnabled {
 					if err := processThinkingTaggedText(text); err != nil {
 						return nil, err
@@ -903,35 +901,17 @@ func StreamEventStreamAsAnthropicWithContext(ctx context.Context, body io.Reader
 			if text == "" {
 				continue
 			}
-			if requestCtx.ThinkingEnabled {
-				// 区分两种 reasoning 场景:
-				// 1. 还没出现过 text content_block(sawNonThinkingBlock=false):
-				//    这是"开场思考",emit thinking block 不会切碎后续 text → 立即 emit。
-				// 2. 已经有 text content_block 之后(sawNonThinkingBlock=true):
-				//    reasoning 在 text 之间穿插,每次 emit 会 closeText 切碎 text block,
-				//    导致 claude code 控制台把 BPE 碎片 's 'm 等渲染成独立 ●。
-				//    → buffer 累积,只在 ≥ kiroMinReasoningEmitChars 才 emit;
-				//      流末尾/工具调用边界丢弃未达阈值的 buffer(claude code 反正不显示)。
-				if !sawNonThinkingBlock || reasoningEmitted {
-					wrapped := thinkingStartTag + text + thinkingEndTag + "\n\n"
-					if err := processThinkingTaggedText(wrapped); err != nil {
-						return nil, err
-					}
-				} else {
-					reasoningBuffer.WriteString(text)
-					if reasoningBuffer.Len() >= kiroMinReasoningEmitChars {
-						wrapped := thinkingStartTag + reasoningBuffer.String() + thinkingEndTag + "\n\n"
-						reasoningBuffer.Reset()
-						reasoningEmitted = true
-						if err := processThinkingTaggedText(wrapped); err != nil {
-							return nil, err
-						}
-					}
+			// 只在第一次 assistantResponseEvent 之前(开场思考)实时 emit thinking。
+			// 一旦 assistant text 已经出现,reasoning 会穿插穿来,任何 emit 都会 closeText
+			// 切碎 text block(Claude Code 控制台 BPE 碎片 's 'm 'we 单独成段)。
+			// 故 text 之后的 reasoning 一律丢弃 — Claude Code 反正不渲染中段 thinking。
+			if requestCtx.ThinkingEnabled && !gotAssistantText {
+				wrapped := thinkingStartTag + text + thinkingEndTag + "\n\n"
+				if err := processThinkingTaggedText(wrapped); err != nil {
+					return nil, err
 				}
 			}
 		case "toolUseEvent":
-			// 工具使用边界处:已 emit 的 thinking buffer 走 flush,未到阈值的 reasoning 丢弃(避免 thinking block 切碎 text)
-			reasoningBuffer.Reset()
 			if err := flushThinkingAtBoundary(); err != nil {
 				return nil, err
 			}

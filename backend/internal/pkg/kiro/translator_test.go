@@ -855,10 +855,10 @@ func TestStreamEventStreamAsAnthropicParsesMultipleReasoningEventsWhenEnabled(t 
 	require.Contains(t, output, `"text":"final"`)
 }
 
-// TestStreamEventStreamAsAnthropicDropsShortReasoningAfterText 验证:已有 text
-// content block 之后,极短 reasoning(< kiroMinReasoningEmitChars)不应触发独立
-// thinking block,避免 closeText 把 text 切碎(claude code 控制台 's 'm 单独成段)。
-func TestStreamEventStreamAsAnthropicDropsShortReasoningAfterText(t *testing.T) {
+// TestStreamEventStreamAsAnthropicDropsReasoningAfterText 验证:已有 text
+// content block 之后,所有 reasoning(无论长短)都不应触发独立 thinking block,
+// 避免 closeText 把 text 切碎(Claude Code 控制台 BPE 碎片 's 'm 're 单独成段)。
+func TestStreamEventStreamAsAnthropicDropsReasoningAfterText(t *testing.T) {
 	stream := bytes.NewBuffer(nil)
 	// 模式:text "I" → 短 reasoning "'ve" → text " been reading"
 	_, _ = stream.Write(buildEventStreamFrame(t, "assistantResponseEvent", map[string]any{
@@ -881,6 +881,35 @@ func TestStreamEventStreamAsAnthropicDropsShortReasoningAfterText(t *testing.T) 
 	// 应该只有一个 text content_block_start(index:0),不应有 index:2 这种再开 text
 	require.Equal(t, 1, strings.Count(output, `"index":0,"type":"content_block_start"`), "expect exactly one text block opened")
 	require.NotContains(t, output, `"index":2,"type":"content_block_start"`, "no extra text block should be opened after reasoning is dropped")
+}
+
+// TestStreamEventStreamAsAnthropicDropsLongReasoningAfterText 验证:即使 text 后
+// 的 reasoning 累积很长(模拟 reasoning_effort=xhigh 场景),也必须全部丢弃。
+// 历史:4020b888 的 200 字阈值在 xhigh 下能轻松累积突破 → 仍切碎 text → 'we 'are 单独成 ●。
+func TestStreamEventStreamAsAnthropicDropsLongReasoningAfterText(t *testing.T) {
+	stream := bytes.NewBuffer(nil)
+	_, _ = stream.Write(buildEventStreamFrame(t, "assistantResponseEvent", map[string]any{
+		"assistantResponseEvent": map[string]any{"content": "We"},
+	}))
+	longReasoning := strings.Repeat("Now I need to think carefully about this. ", 50)
+	_, _ = stream.Write(buildEventStreamFrame(t, "reasoningContentEvent", map[string]any{
+		"reasoningContentEvent": map[string]any{"text": longReasoning},
+	}))
+	_, _ = stream.Write(buildEventStreamFrame(t, "assistantResponseEvent", map[string]any{
+		"assistantResponseEvent": map[string]any{"content": "'re hitting the limit"},
+	}))
+
+	var out bytes.Buffer
+	_, err := StreamEventStreamAsAnthropicWithContext(context.Background(), stream, &out, "claude-sonnet-4-5", 9, KiroRequestContext{ThinkingEnabled: true})
+	require.NoError(t, err)
+
+	output := out.String()
+	require.NotContains(t, output, "Now I need to think carefully", "long reasoning after text must be dropped entirely")
+	require.NotContains(t, output, `"type":"thinking"`, "no thinking content_block should be emitted after text starts")
+	require.Equal(t, 1, strings.Count(output, `"type":"content_block_start"`), "expect exactly one content block opened")
+	require.Contains(t, output, "We", "first text fragment must be preserved")
+	require.Contains(t, output, "'re hitting", "subsequent text fragment must remain in the same block")
+	require.Contains(t, output, " the limit", "tail text fragment must be preserved")
 }
 
 func TestStreamEventStreamAsAnthropicParsesTaggedThinkingWhenEnabled(t *testing.T) {
