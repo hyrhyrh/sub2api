@@ -1291,3 +1291,8 @@ func buildEventStreamFrame(t *testing.T, eventType string, payload any) []byte {
 	require.NoError(t, binary.Write(frame, binary.BigEndian, uint32(0)))
 	return frame.Bytes()
 }
+
+func TestBuildInjectedSystemPromptTimestampHourGranularity(t *testing.T) {
+	out := buildInjectedSystemPrompt("", nil, "")
+	require.Regexp(t, `\[Context: Current time is \d{4}-\d{2}-\d{2} \d{2}:00 \w+\]`, out)
+}

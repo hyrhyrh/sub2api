@@ -1055,7 +1055,7 @@ func thinkingDirectiveFromModel(model string) *thinkingDirective {
 
 func buildInjectedSystemPrompt(systemPrompt string, thinking *thinkingDirective, toolChoiceHint string) string {
 	systemPrompt = strings.TrimSpace(systemPrompt)
-	timestampContext := fmt.Sprintf("[Context: Current time is %s]", time.Now().Format("2006-01-02 15:04:05 MST"))
+	timestampContext := fmt.Sprintf("[Context: Current time is %s]", time.Now().Format("2006-01-02 15:00 MST"))
 	promptParts := []string{kiroBuiltinIdentityPrompt, timestampContext}
 	if systemPrompt != "" {
 		promptParts = append(promptParts, systemPrompt)
