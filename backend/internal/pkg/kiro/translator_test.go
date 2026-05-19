@@ -855,6 +855,34 @@ func TestStreamEventStreamAsAnthropicParsesMultipleReasoningEventsWhenEnabled(t 
 	require.Contains(t, output, `"text":"final"`)
 }
 
+// TestStreamEventStreamAsAnthropicDropsShortReasoningAfterText 验证:已有 text
+// content block 之后,极短 reasoning(< kiroMinReasoningEmitChars)不应触发独立
+// thinking block,避免 closeText 把 text 切碎(claude code 控制台 's 'm 单独成段)。
+func TestStreamEventStreamAsAnthropicDropsShortReasoningAfterText(t *testing.T) {
+	stream := bytes.NewBuffer(nil)
+	// 模式:text "I" → 短 reasoning "'ve" → text " been reading"
+	_, _ = stream.Write(buildEventStreamFrame(t, "assistantResponseEvent", map[string]any{
+		"assistantResponseEvent": map[string]any{"content": "I"},
+	}))
+	_, _ = stream.Write(buildEventStreamFrame(t, "reasoningContentEvent", map[string]any{
+		"reasoningContentEvent": map[string]any{"text": "'ve"},
+	}))
+	_, _ = stream.Write(buildEventStreamFrame(t, "assistantResponseEvent", map[string]any{
+		"assistantResponseEvent": map[string]any{"content": " been reading"},
+	}))
+
+	var out bytes.Buffer
+	_, err := StreamEventStreamAsAnthropicWithContext(context.Background(), stream, &out, "claude-sonnet-4-5", 9, KiroRequestContext{ThinkingEnabled: true})
+	require.NoError(t, err)
+
+	output := out.String()
+	// 短 reasoning 不应产生 thinking content_block
+	require.NotContains(t, output, `"thinking":"'ve"`, "short reasoning between text must be dropped, not emitted as thinking block")
+	// 应该只有一个 text content_block_start(index:0),不应有 index:2 这种再开 text
+	require.Equal(t, 1, strings.Count(output, `"index":0,"type":"content_block_start"`), "expect exactly one text block opened")
+	require.NotContains(t, output, `"index":2,"type":"content_block_start"`, "no extra text block should be opened after reasoning is dropped")
+}
+
 func TestStreamEventStreamAsAnthropicParsesTaggedThinkingWhenEnabled(t *testing.T) {
 	stream := bytes.NewBuffer(nil)
 	_, _ = stream.Write(buildEventStreamFrame(t, "assistantResponseEvent", map[string]any{
