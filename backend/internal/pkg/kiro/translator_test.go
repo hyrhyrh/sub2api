@@ -855,6 +855,53 @@ func TestStreamEventStreamAsAnthropicParsesMultipleReasoningEventsWhenEnabled(t 
 	require.Contains(t, output, `"text":"final"`)
 }
 
+// TestStreamEventStreamAsAnthropicHandlesPrewrappedThinkingReasoning 验证:Kiro 的
+// reasoningContentEvent.text 本身已含字面 <thinking>...</thinking> 标签时,sub2api
+// 不得再套一层(否则双重嵌套 → 内层标签泄漏成 text content_block,Claude Code 正文
+// 出现 'm 's 残片)。应正确解析成单层 thinking block。
+func TestStreamEventStreamAsAnthropicHandlesPrewrappedThinkingReasoning(t *testing.T) {
+	stream := bytes.NewBuffer(nil)
+	_, _ = stream.Write(buildEventStreamFrame(t, "reasoningContentEvent", map[string]any{
+		"reasoningContentEvent": map[string]any{"text": "<thinking>'m reasoning here</thinking>"},
+	}))
+	_, _ = stream.Write(buildEventStreamFrame(t, "assistantResponseEvent", map[string]any{
+		"assistantResponseEvent": map[string]any{"content": "final answer"},
+	}))
+
+	var out bytes.Buffer
+	_, err := StreamEventStreamAsAnthropicWithContext(context.Background(), stream, &out, "claude-sonnet-4-5", 9, KiroRequestContext{ThinkingEnabled: true})
+	require.NoError(t, err)
+
+	output := out.String()
+	// reasoning 内容应进 thinking_delta(单层),内容保留
+	require.Contains(t, output, `"thinking":"'m reasoning here"`)
+	// 绝不能把字面 <thinking> 标签泄漏(SSE 经 json.Marshal,< 被 escape 成 <)
+	require.NotContains(t, output, `<thinking`, "literal <thinking> tag must not leak into output")
+	require.NotContains(t, output, `</thinking`, "literal </thinking> tag must not leak into output")
+	// reasoning 应在 thinking block,不得出现在 text block(text block 只应有 assistant 正文)
+	require.NotContains(t, output, `"text_delta","text":"'m`, "reasoning must not leak into a text block")
+	// 后续 assistant text 正常流出(流式可能分块,验证内容片段)
+	require.Contains(t, output, "nal answer")
+}
+
+// TestParseNonStreamingEventStreamHandlesPrewrappedThinking 验证非流式路径同样不双重 wrap。
+func TestParseNonStreamingEventStreamHandlesPrewrappedThinking(t *testing.T) {
+	stream := bytes.NewBuffer(nil)
+	_, _ = stream.Write(buildEventStreamFrame(t, "reasoningContentEvent", map[string]any{
+		"reasoningContentEvent": map[string]any{"text": "<thinking>'s reasoning</thinking>"},
+	}))
+	_, _ = stream.Write(buildEventStreamFrame(t, "assistantResponseEvent", map[string]any{
+		"assistantResponseEvent": map[string]any{"content": "answer"},
+	}))
+
+	result, err := ParseNonStreamingEventStreamWithContext(stream, "claude-sonnet-4-5", KiroRequestContext{ThinkingEnabled: true})
+	require.NoError(t, err)
+	// ResponseBody 是最终 Anthropic JSON;thinking 标签应被 extractThinkingBlocks 剥离,
+	// 不该有字面 <thinking>(escaped)泄漏(双重 wrap 时内层标签会残留)。
+	require.NotContains(t, string(result.ResponseBody), `<thinking`, "literal <thinking> must not leak in non-streaming output")
+	require.Contains(t, string(result.ResponseBody), `'s reasoning`, "reasoning content should be preserved as thinking")
+}
+
 // TestStreamEventStreamAsAnthropicDropsReasoningAfterText 验证:已有 text
 // content block 之后,所有 reasoning(无论长短)都不应触发独立 thinking block,
 // 避免 closeText 把 text 切碎(Claude Code 控制台 BPE 碎片 's 'm 're 单独成段)。

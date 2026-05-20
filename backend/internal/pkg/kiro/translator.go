@@ -906,7 +906,16 @@ func StreamEventStreamAsAnthropicWithContext(ctx context.Context, body io.Reader
 			// 切碎 text block(Claude Code 控制台 BPE 碎片 's 'm 'we 单独成段)。
 			// 故 text 之后的 reasoning 一律丢弃 — Claude Code 反正不渲染中段 thinking。
 			if requestCtx.ThinkingEnabled && !gotAssistantText {
-				wrapped := thinkingStartTag + text + thinkingEndTag + "\n\n"
+				// Kiro 有时把 reasoning 内容已经包成字面 <thinking>...</thinking> 标签发来。
+				// 此时再套一层会变成 <thinking><thinking>...</thinking></thinking>,
+				// processThinkingTaggedText 解析双重嵌套时内层标签会泄漏成 text content_block
+				// (Claude Code 正文出现 'm 's 残片)。已自带标签则只补 \n\n 让 endTag 可识别。
+				var wrapped string
+				if strings.Contains(text, thinkingStartTag) {
+					wrapped = text + "\n\n"
+				} else {
+					wrapped = thinkingStartTag + text + thinkingEndTag + "\n\n"
+				}
 				if err := processThinkingTaggedText(wrapped); err != nil {
 					return nil, err
 				}
@@ -1834,9 +1843,14 @@ func parseEventStream(body io.Reader) (string, []KiroToolUse, Usage, string, err
 				text = getString(event, "text")
 			}
 			if text != "" {
-				_, _ = content.WriteString(thinkingStartTag)
-				_, _ = content.WriteString(text)
-				_, _ = content.WriteString(thinkingEndTag)
+				// 见流式路径说明:Kiro 可能已自带 <thinking> 标签,避免双重 wrap。
+				if strings.Contains(text, thinkingStartTag) {
+					_, _ = content.WriteString(text)
+				} else {
+					_, _ = content.WriteString(thinkingStartTag)
+					_, _ = content.WriteString(text)
+					_, _ = content.WriteString(thinkingEndTag)
+				}
 			}
 		default:
 			updateUsageFromEvent(&usage, msg.EventType, event)
@@ -2096,10 +2110,13 @@ func findRealThinkingTag(content, tag string, from int, allowEndBoundary bool) i
 }
 
 func isThinkingTagQuoted(content string, start, after int) bool {
-	if start > 0 && isThinkingQuoteChar(content[start-1]) {
-		return true
-	}
-	return after < len(content) && isThinkingQuoteChar(content[after])
+	// 仅当标签两侧成对引号才算"被引用"(如 `<thinking>` 或 "<thinking>")。
+	// 历史用 OR(单边引号即判引用),会把内容恰好以引号开头的残缺标签误判:
+	// Kiro 残缺 reasoning <thinking>'m... 中标签后紧跟单引号 ' → 被误当引用跳过,
+	// 导致字面 <thinking> 标签泄漏成正文(Claude Code 出现 'm 's 残片)。
+	before := start > 0 && isThinkingQuoteChar(content[start-1])
+	after2 := after < len(content) && isThinkingQuoteChar(content[after])
+	return before && after2
 }
 
 func isThinkingQuoteChar(ch byte) bool {
