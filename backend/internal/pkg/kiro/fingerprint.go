@@ -152,6 +152,23 @@ func NormalizeMachineID(machineID string) (string, bool) {
 	return "", false
 }
 
+// processFallbackMachineSeed 为"三个凭据键全空"的兜底场景提供一个进程内稳定、
+// 但每个进程实例不同的随机种子。历史上这里固定用 "KiroFallback/default",
+// 导致所有走兜底的账号(乃至所有 sub2api 部署实例)派生出完全相同的 machineID。
+// 一旦上游按 machineID 去重/封禁,这些账号会同坠。改为进程级 uuid 后,
+// 同进程内仍稳定(无区分键时本就无法区分),但不同实例不再全局碰撞。
+var (
+	fallbackMachineSeed     string
+	fallbackMachineSeedOnce sync.Once
+)
+
+func processFallbackMachineSeed() string {
+	fallbackMachineSeedOnce.Do(func() {
+		fallbackMachineSeed = uuid.NewString()
+	})
+	return fallbackMachineSeed
+}
+
 func BuildMachineID(refreshToken, apiKey, fallbackKey string) string {
 	if refreshToken = strings.TrimSpace(refreshToken); refreshToken != "" {
 		return sha256Hex("KotlinNativeAPI/" + refreshToken)
@@ -162,7 +179,7 @@ func BuildMachineID(refreshToken, apiKey, fallbackKey string) string {
 	if fallbackKey = strings.TrimSpace(fallbackKey); fallbackKey != "" {
 		return sha256Hex("KiroFallback/" + fallbackKey)
 	}
-	return sha256Hex("KiroFallback/default")
+	return sha256Hex("KiroFallback/" + processFallbackMachineSeed())
 }
 
 func shortSHA(seed string) string {

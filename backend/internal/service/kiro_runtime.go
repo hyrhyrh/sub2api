@@ -39,6 +39,11 @@ func kiroRetryBackoffDelay(attempt int) time.Duration {
 	if attempt < 0 {
 		attempt = 0
 	}
+	// clamp 移位指数,避免理论上 attempt 过大导致 1<<attempt 溢出。
+	// 当前调用方 maxRetries=2,远不会触及,但与 kiro.rs(attempt.min(6))对齐做纯防御。
+	if attempt > 6 {
+		attempt = 6
+	}
 	delay := kiroRetryBaseDelay * time.Duration(1<<attempt)
 	if delay > kiroRetryMaxDelay {
 		delay = kiroRetryMaxDelay
@@ -446,6 +451,11 @@ func (s *GatewayService) executeKiroUpstream(ctx context.Context, account *Accou
 	tlsProfile := s.tlsFPProfileService.ResolveTLSProfile(account)
 	accountKey := buildKiroAccountKey(account)
 	maxRetries := 2
+	// forceRefreshedOnce: 本次 executeKiroUpstream 调用(对应单个账号)内,
+	// 401/bearer_token_invalid 触发的 ForceRefreshAccessToken 最多执行一次。
+	// 避免 401 → force_refresh → 仍 401 → 又 force_refresh 的刷新风暴。
+	// 切到下一个账号时是新的 executeKiroUpstream 调用,该标志自然重置。
+	forceRefreshedOnce := false
 
 	for idx, endpoint := range endpoints {
 		for attempt := 0; attempt <= maxRetries; attempt++ {
@@ -540,7 +550,8 @@ func (s *GatewayService) executeKiroUpstream(ctx context.Context, account *Accou
 					return resp, requestCtx, nil
 				}
 
-				if s.kiroTokenProvider != nil && (resp.StatusCode == http.StatusUnauthorized || isKiroTokenErrorBody(respBody)) && attempt < maxRetries {
+				if s.kiroTokenProvider != nil && !forceRefreshedOnce && (resp.StatusCode == http.StatusUnauthorized || isKiroTokenErrorBody(respBody)) && attempt < maxRetries {
+					forceRefreshedOnce = true
 					refreshedToken, refreshErr := s.kiroTokenProvider.ForceRefreshAccessToken(ctx, account)
 					if refreshErr == nil && strings.TrimSpace(refreshedToken) != "" {
 						currentToken = refreshedToken
