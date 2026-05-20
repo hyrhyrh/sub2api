@@ -121,7 +121,29 @@ const (
 	kiroRetryAfterMinMSDefault = 200
 	kiroRetryAfterMaxSEnv      = "KIRO_RETRY_AFTER_MAX_S"
 	kiroRetryAfterMaxSDefault  = 7 * 24 * 60 * 60 // 7 天
+
+	// KIRO_429_NO_ACCOUNT_COOLDOWN: 对齐 kiro.rs —— 上游 429 是瞬态错误(high traffic),
+	// 不应惩罚账号。默认 true:429 时优先 sleep-retry 同号,不再标账号级指数退避 cooldown
+	// (否则偶发 429 → 账号被锁 → 切号 → 又 429 → 雪崩全池锁死,即"发个'你好'打死所有号")。
+	// family 级短冷却仍保留(尊重上游 Retry-After)。设为 false 恢复旧行为(429 标账号 cooldown)。
+	kiro429NoAccountCooldownEnv     = "KIRO_429_NO_ACCOUNT_COOLDOWN"
+	kiro429NoAccountCooldownDefault = true
 )
+
+// kiro429NoAccountCooldown 是否对 429 跳过账号级 cooldown(对齐 kiro.rs 瞬态处理)。
+// 缺失 / 解析失败 → 默认 true。识别 false / 0 / no / off 关键字恢复旧惩罚行为。
+func kiro429NoAccountCooldown() bool {
+	raw := strings.TrimSpace(strings.ToLower(os.Getenv(kiro429NoAccountCooldownEnv)))
+	if raw == "" {
+		return kiro429NoAccountCooldownDefault
+	}
+	switch raw {
+	case "false", "0", "no", "off", "disabled":
+		return false
+	default:
+		return true
+	}
+}
 
 // kiroServiceRetryMax 从 env 读取 service 层 failover 重试次数。<0 回退默认 3,=0 关闭。
 func kiroServiceRetryMax() int {

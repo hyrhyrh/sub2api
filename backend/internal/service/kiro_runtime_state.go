@@ -97,11 +97,17 @@ func (s *GatewayService) markKiro429WithFamily(
 	mappedModel string,
 	respHeader http.Header,
 	respBody []byte,
+	markAccountCooldown bool,
 ) (time.Duration, error) {
-	// 1. 账号级 (P0)
-	accountCD, err := s.markKiro429(ctx, tokenKey)
-	if err != nil {
-		return 0, err
+	// 1. 账号级 (P0) —— 对齐 kiro.rs:429 是瞬态错误,默认不再惩罚账号(markAccountCooldown=false),
+	//    避免偶发 429 把账号锁进指数退避导致全池雪崩。仅 markAccountCooldown=true 时保留旧行为。
+	var accountCD time.Duration
+	if markAccountCooldown {
+		cd, err := s.markKiro429(ctx, tokenKey)
+		if err != nil {
+			return 0, err
+		}
+		accountCD = cd
 	}
 
 	// 2. family 级 (P1 #5)

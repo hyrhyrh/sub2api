@@ -476,25 +476,35 @@ func (s *GatewayService) executeKiroUpstream(ctx context.Context, account *Accou
 			}
 
 			if resp.StatusCode == http.StatusTooManyRequests {
-				// P1 #5+#8: 同时 mark 账号级 + (account, model family) 级冷却,
-				// family 时长优先用上游 Retry-After,缺失则用 KIRO_FAMILY_COOLDOWN_DEFAULT_S。
-				// 先读 body(用于 Retry-After body fallback 和后续 resp 返回),
-				// 再 mark,最后用 resetHTTPResponseBody 还原 body 给调用方。
+				// 对齐 kiro.rs:429 是上游瞬态错误(high traffic),与 5xx/408 同等处理 ——
+				// 优先 sleep-retry 同 endpoint/同号,默认不惩罚账号(KIRO_429_NO_ACCOUNT_COOLDOWN)。
+				// 旧行为(立即标账号级指数退避 cooldown + 切号)会让偶发 429 把账号锁死,
+				// 切号后下一个号也偶发 429 → 雪崩全池锁死("发个'你好'打死所有号")。
+				// family 级短冷却仍保留(尊重上游 Retry-After,KIRO_FAMILY_COOLDOWN_DEFAULT_S 兜底)。
 				respBody, readErr := io.ReadAll(resp.Body)
 				_ = resp.Body.Close()
 				if readErr != nil {
 					return nil, requestCtx, readErr
 				}
-				cooldown, err := s.markKiro429WithFamily(ctx, account, accountKey, mappedModel, resp.Header, respBody)
+				cooldown, err := s.markKiro429WithFamily(ctx, account, accountKey, mappedModel, resp.Header, respBody, !kiro429NoAccountCooldown())
 				if err != nil {
 					return nil, requestCtx, err
 				}
+				// 优先在同 endpoint/同号上 sleep-retry(瞬态错误大概率重试即成功)
+				if attempt < maxRetries {
+					if sleepErr := sleepKiroRetry(ctx, attempt); sleepErr != nil {
+						return nil, requestCtx, sleepErr
+					}
+					continue
+				}
+				// 同 endpoint 重试用尽 → 尝试下一 endpoint
 				if idx+1 < len(endpoints) {
 					if sleepErr := sleepKiroRetry(ctx, attempt); sleepErr != nil {
 						return nil, requestCtx, sleepErr
 					}
 					break
 				}
+				// 所有 endpoint + 重试用尽 → 返回 429 让 service 层切号
 				resp.Header.Set("x-kiro-cooldown", cooldown.String())
 				resetHTTPResponseBody(resp, respBody)
 				return resp, requestCtx, nil
