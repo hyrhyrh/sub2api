@@ -14,7 +14,7 @@ import (
 	"github.com/dgraph-io/ristretto"
 )
 
-const apiKeyAuthSnapshotVersion = 10 // v10: added Kiro group cache emulation fields
+const apiKeyAuthSnapshotVersion = 11 // v11: merge Kiro group cache emulation fields + group availability checks
 
 type apiKeyAuthCacheConfig struct {
 	l1Size        int
