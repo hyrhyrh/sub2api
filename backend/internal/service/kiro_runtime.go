@@ -486,9 +486,17 @@ func (s *GatewayService) executeKiroUpstream(ctx context.Context, account *Accou
 				if readErr != nil {
 					return nil, requestCtx, readErr
 				}
-				cooldown, err := s.markKiro429WithFamily(ctx, account, accountKey, mappedModel, resp.Header, respBody, !kiro429NoAccountCooldown())
-				if err != nil {
-					return nil, requestCtx, err
+				// 对齐 kiro.rs:KIRO_429_NO_ACCOUNT_COOLDOWN=true 时 429 完全不标任何 cooldown
+				// (account + family 都不标)。family cooldown 即便 ENABLED=false 也会在
+				// markKiro429WithFamily 内被标(该函数 family 分支不受开关控制),它是放大器
+				// (一个请求切 5 号各标 family 30s → 全池 opus 锁死)。这里源头跳过。
+				var cooldown time.Duration
+				if !kiro429NoAccountCooldown() {
+					cd, mErr := s.markKiro429WithFamily(ctx, account, accountKey, mappedModel, resp.Header, respBody, true)
+					if mErr != nil {
+						return nil, requestCtx, mErr
+					}
+					cooldown = cd
 				}
 				// 优先在同 endpoint/同号上 sleep-retry(瞬态错误大概率重试即成功)
 				if attempt < maxRetries {
