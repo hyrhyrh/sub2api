@@ -822,6 +822,11 @@ func (s *GatewayService) handleKiroHTTPError(ctx context.Context, resp *http.Res
 			StatusCode:      resp.StatusCode,
 			ResponseBody:    respBody,
 			ResponseHeaders: resp.Header.Clone(),
+			// 对齐 kiro.rs:上游 429 是瞬态错误(high traffic),先在同账号 sleep-retry
+			// (handler 层 maxSameAccountRetries=3 × 500ms)再切号,避免一个请求瞬间切一圈号
+			// 把瞬态 429 放大成全池失败。仅 429 适用;402(配额耗尽)等同号重试无意义。
+			// 安全:TempUnscheduleRetryableError 对 429 是 no-op(只封 400/502),不引入新惩罚。
+			RetryableOnSameAccount: resp.StatusCode == http.StatusTooManyRequests,
 		}
 	}
 
