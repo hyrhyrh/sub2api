@@ -136,7 +136,7 @@ func TestAccountHandlerGetAvailableModels_KiroOAuthFallsBackToDefaults(t *testin
 		ids = append(ids, model.ID)
 	}
 	require.True(t, slices.Contains(ids, "claude-opus-4-6"))
-	require.False(t, slices.Contains(ids, "claude-opus-4-7"))
+	require.True(t, slices.Contains(ids, "claude-opus-4-7"))
 	require.False(t, slices.Contains(ids, "kiro-claude-opus-4-7"))
 }
 
@@ -254,6 +254,6 @@ func TestAccountHandlerGetAvailableModels_KiroAPIKeyWithoutMappingFallsBackToDef
 		ids = append(ids, model.ID)
 	}
 	require.True(t, slices.Contains(ids, "claude-opus-4-6"))
-	require.False(t, slices.Contains(ids, "claude-opus-4-7"))
+	require.True(t, slices.Contains(ids, "claude-opus-4-7"))
 	require.False(t, slices.Contains(ids, "kiro-claude-opus-4-7"))
 }
