@@ -130,6 +130,22 @@ func (h *EmailBroadcastHandler) List(c *gin.Context) {
 	})
 }
 
+// Delete hard-deletes a broadcast record by id. Returns 409 if the broadcast is
+// still pending or sending so the user retries after it settles.
+// DELETE /api/v1/admin/email-broadcasts/:id
+func (h *EmailBroadcastHandler) Delete(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || id <= 0 {
+		response.BadRequest(c, "Invalid broadcast id")
+		return
+	}
+	if err := h.broadcastService.Delete(c.Request.Context(), id); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, gin.H{"id": id})
+}
+
 // Preview returns the fully composed HTML that would be delivered for the given
 // subject + body + format, so the admin UI can render a faithful live preview.
 // POST /api/v1/admin/email-broadcasts/preview

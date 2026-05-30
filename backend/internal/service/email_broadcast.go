@@ -31,6 +31,7 @@ var (
 	ErrEmailBroadcastNoRecipients       = domain.ErrEmailBroadcastNoRecipients
 	ErrEmailBroadcastTooManyRecipients  = domain.ErrEmailBroadcastTooManyRecipients
 	ErrEmailBroadcastEmailNotConfigured = domain.ErrEmailBroadcastEmailNotConfigured
+	ErrEmailBroadcastDeleteInFlight     = domain.ErrEmailBroadcastDeleteInFlight
 )
 
 // EmailBroadcast 是 service 层暴露的批量公告邮件聚合状态。
@@ -96,4 +97,5 @@ type EmailBroadcastRepository interface {
 	GetByID(ctx context.Context, id int64) (*EmailBroadcast, error)
 	UpdateStatus(ctx context.Context, id int64, patch EmailBroadcastStatusUpdate) error
 	List(ctx context.Context, params EmailBroadcastListParams) (*EmailBroadcastListResult, error)
+	Delete(ctx context.Context, id int64) error
 }

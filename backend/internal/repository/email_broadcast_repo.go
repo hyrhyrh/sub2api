@@ -96,6 +96,18 @@ func (r *emailBroadcastRepository) UpdateStatus(ctx context.Context, id int64, p
 	return nil
 }
 
+func (r *emailBroadcastRepository) Delete(ctx context.Context, id int64) error {
+	client := clientFromContext(ctx, r.client)
+	n, err := client.EmailBroadcast.Delete().Where(emailbroadcast.IDEQ(id)).Exec(ctx)
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return service.ErrEmailBroadcastNotFound
+	}
+	return nil
+}
+
 func (r *emailBroadcastRepository) List(ctx context.Context, params service.EmailBroadcastListParams) (*service.EmailBroadcastListResult, error) {
 	q := r.client.EmailBroadcast.Query()
 	if params.Status != "" {

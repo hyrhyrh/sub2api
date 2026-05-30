@@ -56,6 +56,12 @@ func (s *emailBroadcastRepoStub) List(_ context.Context, _ EmailBroadcastListPar
 	return s.listOut, nil
 }
 
+func (s *emailBroadcastRepoStub) Delete(_ context.Context, _ int64) error {
+	s.created = nil
+	s.getOut = nil
+	return nil
+}
+
 // settingRepoStubNoSMTP returns no SMTP host so GetSMTPConfig fails with ErrEmailNotConfigured.
 type settingRepoStubNoSMTP struct{}
 
@@ -290,6 +296,40 @@ func TestResolveSenderName_FallsBackToSiteName(t *testing.T) {
 	svc := NewEmailBroadcastService(&emailBroadcastRepoStub{}, nil, emailSvc, repo)
 	got := svc.resolveSenderName(context.Background())
 	require.Equal(t, "My Site", got)
+}
+
+func TestDelete_RejectsPending(t *testing.T) {
+	svc, repo := newTestEmailBroadcastService()
+	repo.getOut = &EmailBroadcast{ID: 7, Status: EmailBroadcastStatusPending}
+	err := svc.Delete(context.Background(), 7)
+	require.ErrorIs(t, err, ErrEmailBroadcastDeleteInFlight)
+}
+
+func TestDelete_RejectsSending(t *testing.T) {
+	svc, repo := newTestEmailBroadcastService()
+	repo.getOut = &EmailBroadcast{ID: 8, Status: EmailBroadcastStatusSending}
+	err := svc.Delete(context.Background(), 8)
+	require.ErrorIs(t, err, ErrEmailBroadcastDeleteInFlight)
+}
+
+func TestDelete_AllowsCompleted(t *testing.T) {
+	svc, repo := newTestEmailBroadcastService()
+	repo.getOut = &EmailBroadcast{ID: 9, Status: EmailBroadcastStatusCompleted}
+	err := svc.Delete(context.Background(), 9)
+	require.NoError(t, err)
+}
+
+func TestDelete_AllowsFailed(t *testing.T) {
+	svc, repo := newTestEmailBroadcastService()
+	repo.getOut = &EmailBroadcast{ID: 10, Status: EmailBroadcastStatusFailed}
+	err := svc.Delete(context.Background(), 10)
+	require.NoError(t, err)
+}
+
+func TestDelete_RejectsZeroID(t *testing.T) {
+	svc, _ := newTestEmailBroadcastService()
+	err := svc.Delete(context.Background(), 0)
+	require.ErrorIs(t, err, ErrEmailBroadcastNotFound)
 }
 
 func TestPreviewHTML_RendersSMTPFromNameInTemplate(t *testing.T) {

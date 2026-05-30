@@ -164,6 +164,30 @@ func (s *EmailBroadcastService) Get(ctx context.Context, id int64) (*EmailBroadc
 	return s.repo.GetByID(ctx, id)
 }
 
+// Delete 物理删除一条历史 broadcast。
+// 拒绝删除正在发送中的记录,避免与后台 worker 的状态回写竞争。
+// Delete hard-deletes a broadcast record. Refuses to delete records that are
+// still being dispatched to avoid racing the background worker's status writes.
+func (s *EmailBroadcastService) Delete(ctx context.Context, id int64) error {
+	if id <= 0 {
+		return ErrEmailBroadcastNotFound
+	}
+	existing, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if existing == nil {
+		return ErrEmailBroadcastNotFound
+	}
+	if existing.Status == EmailBroadcastStatusPending || existing.Status == EmailBroadcastStatusSending {
+		return ErrEmailBroadcastDeleteInFlight
+	}
+	if s.isRunning(id) {
+		return ErrEmailBroadcastDeleteInFlight
+	}
+	return s.repo.Delete(ctx, id)
+}
+
 // runBroadcast 是后台 goroutine 入口，对单次 broadcast 执行解析收件人 + 实际 SMTP 投递 + 状态回写。
 // 整个过程使用独立的 context.Background，避免 HTTP 请求结束导致中断。
 func (s *EmailBroadcastService) runBroadcast(id int64) {
@@ -502,6 +526,14 @@ func (s *EmailBroadcastService) unmarkRunning(id int64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.running, id)
+}
+
+// isRunning 报告指定 broadcast 当前是否在后台 worker 中执行。
+func (s *EmailBroadcastService) isRunning(id int64) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, ok := s.running[id]
+	return ok
 }
 
 func ptrStr(s string) *string { return &s }

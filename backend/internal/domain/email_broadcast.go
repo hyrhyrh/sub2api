@@ -44,4 +44,5 @@ var (
 	ErrEmailBroadcastNoRecipients      = infraerrors.BadRequest("EMAIL_BROADCAST_NO_RECIPIENTS", "email broadcast requires at least one recipient")
 	ErrEmailBroadcastTooManyRecipients = infraerrors.BadRequest("EMAIL_BROADCAST_TOO_MANY_RECIPIENTS", "email broadcast recipient count exceeds maximum")
 	ErrEmailBroadcastEmailNotConfigured = infraerrors.BadRequest("EMAIL_BROADCAST_EMAIL_NOT_CONFIGURED", "SMTP/email service is not configured")
+	ErrEmailBroadcastDeleteInFlight     = infraerrors.Conflict("EMAIL_BROADCAST_DELETE_IN_FLIGHT", "cannot delete a broadcast that is still pending or sending")
 )
