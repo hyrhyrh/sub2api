@@ -38,6 +38,13 @@ type CreateEmailBroadcastRequest struct {
 	RecipientUserIDs []int64 `json:"recipient_user_ids"`
 }
 
+// PreviewEmailBroadcastRequest is the body for POST /api/v1/admin/email-broadcasts/preview.
+type PreviewEmailBroadcastRequest struct {
+	Subject    string `json:"subject"`
+	Body       string `json:"body"`
+	BodyFormat string `json:"body_format" binding:"omitempty,oneof=html text"`
+}
+
 // EmailBroadcastRecipientCandidate is one searchable user shown in the recipient picker.
 type EmailBroadcastRecipientCandidate struct {
 	ID       int64  `json:"id"`
@@ -121,6 +128,22 @@ func (h *EmailBroadcastHandler) List(c *gin.Context) {
 		"page":      result.Page,
 		"page_size": result.PageSize,
 	})
+}
+
+// Preview returns the fully composed HTML that would be delivered for the given
+// subject + body + format, so the admin UI can render a faithful live preview.
+// POST /api/v1/admin/email-broadcasts/preview
+func (h *EmailBroadcastHandler) Preview(c *gin.Context) {
+	var req PreviewEmailBroadcastRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	if req.BodyFormat == "" {
+		req.BodyFormat = "html"
+	}
+	htmlBody := h.broadcastService.PreviewHTML(c.Request.Context(), req.Subject, req.Body, req.BodyFormat)
+	response.Success(c, gin.H{"html": htmlBody})
 }
 
 // SearchRecipients backs the recipient multi-select picker.

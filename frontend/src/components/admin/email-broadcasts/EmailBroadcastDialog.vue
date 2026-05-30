@@ -2,11 +2,11 @@
   <BaseDialog
     :show="show"
     :title="t('admin.emailBroadcast.title')"
-    width="wide"
+    width="full"
     @close="handleClose"
   >
-    <div class="space-y-6">
-      <!-- Compose form -->
+    <div class="grid gap-6 lg:grid-cols-2">
+      <!-- Compose pane -->
       <div class="space-y-4">
         <div>
           <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -26,7 +26,7 @@
         </div>
 
         <div>
-          <div class="mb-2 flex items-center justify-between">
+          <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
             <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
               {{ t('admin.emailBroadcast.form.body') }}
               <span class="text-red-500">*</span>
@@ -45,10 +45,29 @@
               </label>
             </div>
           </div>
+
+          <!-- HTML quick-insert toolbar -->
+          <div
+            v-if="form.body_format === 'html'"
+            class="mb-2 flex flex-wrap items-center gap-1 rounded-t-lg border border-b-0 border-gray-200 bg-gray-50 px-2 py-1.5 dark:border-dark-700 dark:bg-dark-700"
+          >
+            <button
+              v-for="snippet in htmlSnippets"
+              :key="snippet.id"
+              type="button"
+              class="rounded px-2 py-1 text-xs font-medium text-gray-700 hover:bg-white dark:text-gray-300 dark:hover:bg-dark-600"
+              :title="snippet.title"
+              @click="insertSnippet(snippet)"
+            >
+              {{ snippet.label }}
+            </button>
+          </div>
+
           <textarea
+            ref="bodyTextareaRef"
             v-model="form.body"
-            rows="10"
-            class="input font-mono text-sm"
+            rows="14"
+            :class="['input font-mono text-sm', form.body_format === 'html' ? 'rounded-t-none' : '']"
             :maxlength="BODY_MAX_LEN"
             :placeholder="bodyPlaceholder"
           />
@@ -65,14 +84,10 @@
           </label>
 
           <div class="rounded-lg border border-gray-200 p-4 dark:border-dark-700">
-            <label class="flex items-center gap-2 text-sm font-medium text-gray-900 dark:text-white">
-              <input
-                v-model="sendToAll"
-                type="checkbox"
-                class="form-checkbox"
-              />
+            <label class="flex flex-wrap items-center gap-2 text-sm font-medium text-gray-900 dark:text-white">
+              <input v-model="sendToAll" type="checkbox" class="form-checkbox" />
               <span>{{ t('admin.emailBroadcast.form.sendToAll') }}</span>
-              <span class="ml-2 text-xs font-normal text-gray-500 dark:text-gray-400">
+              <span class="text-xs font-normal text-gray-500 dark:text-gray-400">
                 {{ t('admin.emailBroadcast.form.sendToAllHint') }}
               </span>
             </label>
@@ -86,6 +101,7 @@
                   :placeholder="t('admin.emailBroadcast.form.searchRecipientsPlaceholder')"
                   @input="handleRecipientSearch"
                   @focus="recipientPickerOpen = true"
+                  @blur="recipientPickerOpen = false"
                 />
                 <div
                   v-if="recipientPickerOpen && (searchLoading || recipientCandidates.length > 0 || (recipientSearch && !searchLoading))"
@@ -136,56 +152,82 @@
           </div>
         </div>
 
-        <div v-if="errorMessage" class="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-300">
+        <div
+          v-if="errorMessage"
+          class="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-300"
+        >
           {{ errorMessage }}
         </div>
       </div>
 
-      <!-- History -->
-      <div>
-        <button
-          type="button"
-          class="flex w-full items-center justify-between rounded-lg border border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-dark-700 dark:text-gray-300 dark:hover:bg-dark-700"
-          @click="toggleHistory"
-        >
-          <span>{{ t('admin.emailBroadcast.history.title') }}</span>
-          <span class="text-xs text-gray-500">{{ historyExpanded ? '▲' : '▼' }}</span>
-        </button>
-        <div v-if="historyExpanded" class="mt-3 space-y-2">
-          <div v-if="historyLoading" class="py-4 text-center text-sm text-gray-500">
-            {{ t('common.loading') }}
-          </div>
-          <div v-else-if="historyItems.length === 0" class="py-4 text-center text-sm text-gray-500">
-            {{ t('admin.emailBroadcast.history.empty') }}
-          </div>
-          <ul v-else class="divide-y divide-gray-100 dark:divide-dark-700">
-            <li
-              v-for="item in historyItems"
-              :key="item.id"
-              class="flex flex-col gap-1 py-3 text-sm sm:flex-row sm:items-center sm:justify-between"
-            >
-              <div class="min-w-0 flex-1">
-                <div class="truncate font-medium text-gray-900 dark:text-white">{{ item.subject }}</div>
-                <div class="text-xs text-gray-500 dark:text-gray-400">
-                  {{ formatDateTime(item.created_at) }}
-                  &middot;
-                  {{ t(`admin.emailBroadcast.recipientsMode.${item.recipients_mode}`) }}
-                </div>
-              </div>
-              <div class="flex items-center gap-3 text-xs">
-                <span
-                  class="rounded-full px-2 py-0.5"
-                  :class="statusBadgeClass(item.status)"
-                >
-                  {{ t(`admin.emailBroadcast.status.${item.status}`) }}
-                </span>
-                <span class="text-gray-500 dark:text-gray-400">
-                  {{ item.success_count }} / {{ item.total_count }}
-                </span>
-              </div>
-            </li>
-          </ul>
+      <!-- Preview pane -->
+      <div class="space-y-3">
+        <div class="flex items-center justify-between">
+          <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300">
+            {{ t('admin.emailBroadcast.preview.title') }}
+          </h3>
+          <span v-if="previewLoading" class="text-xs text-gray-500 dark:text-gray-400">
+            {{ t('admin.emailBroadcast.preview.refreshing') }}
+          </span>
+          <span v-else-if="previewError" class="text-xs text-red-500">
+            {{ t('admin.emailBroadcast.preview.error') }}
+          </span>
         </div>
+        <div class="rounded-lg border border-gray-200 bg-gray-50 dark:border-dark-700 dark:bg-dark-800">
+          <iframe
+            ref="previewIframeRef"
+            class="block h-[560px] w-full rounded-lg bg-white"
+            sandbox=""
+            :title="t('admin.emailBroadcast.preview.iframeTitle')"
+          />
+        </div>
+        <p class="text-xs text-gray-500 dark:text-gray-400">
+          {{ t('admin.emailBroadcast.preview.hint') }}
+        </p>
+      </div>
+    </div>
+
+    <!-- History -->
+    <div class="mt-6 border-t border-gray-100 pt-4 dark:border-dark-700">
+      <button
+        type="button"
+        class="flex w-full items-center justify-between rounded-lg border border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-dark-700 dark:text-gray-300 dark:hover:bg-dark-700"
+        @click="toggleHistory"
+      >
+        <span>{{ t('admin.emailBroadcast.history.title') }}</span>
+        <span class="text-xs text-gray-500">{{ historyExpanded ? '▲' : '▼' }}</span>
+      </button>
+      <div v-if="historyExpanded" class="mt-3 space-y-2">
+        <div v-if="historyLoading" class="py-4 text-center text-sm text-gray-500">
+          {{ t('common.loading') }}
+        </div>
+        <div v-else-if="historyItems.length === 0" class="py-4 text-center text-sm text-gray-500">
+          {{ t('admin.emailBroadcast.history.empty') }}
+        </div>
+        <ul v-else class="divide-y divide-gray-100 dark:divide-dark-700">
+          <li
+            v-for="item in historyItems"
+            :key="item.id"
+            class="flex flex-col gap-1 py-3 text-sm sm:flex-row sm:items-center sm:justify-between"
+          >
+            <div class="min-w-0 flex-1">
+              <div class="truncate font-medium text-gray-900 dark:text-white">{{ item.subject }}</div>
+              <div class="text-xs text-gray-500 dark:text-gray-400">
+                {{ formatDateTime(item.created_at) }}
+                &middot;
+                {{ t(`admin.emailBroadcast.recipientsMode.${item.recipients_mode}`) }}
+              </div>
+            </div>
+            <div class="flex items-center gap-3 text-xs">
+              <span class="rounded-full px-2 py-0.5" :class="statusBadgeClass(item.status)">
+                {{ t(`admin.emailBroadcast.status.${item.status}`) }}
+              </span>
+              <span class="text-gray-500 dark:text-gray-400">
+                {{ item.success_count }} / {{ item.total_count }}
+              </span>
+            </div>
+          </li>
+        </ul>
       </div>
     </div>
 
@@ -216,7 +258,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import { useAppStore } from '@/stores/app'
@@ -271,6 +313,32 @@ const historyExpanded = ref(false)
 const historyLoading = ref(false)
 const historyItems = ref<EmailBroadcastSummary[]>([])
 
+const previewIframeRef = ref<HTMLIFrameElement | null>(null)
+const bodyTextareaRef = ref<HTMLTextAreaElement | null>(null)
+const previewLoading = ref(false)
+const previewError = ref(false)
+let previewTimer: ReturnType<typeof setTimeout> | null = null
+let previewAbort: AbortController | null = null
+
+interface HTMLSnippet {
+  id: string
+  label: string
+  title: string
+  before: string
+  after: string
+}
+
+const htmlSnippets: HTMLSnippet[] = [
+  { id: 'p', label: 'P', title: 'Paragraph', before: '<p>', after: '</p>' },
+  { id: 'b', label: 'B', title: 'Bold', before: '<strong>', after: '</strong>' },
+  { id: 'i', label: 'I', title: 'Italic', before: '<em>', after: '</em>' },
+  { id: 'a', label: 'Link', title: 'Link', before: '<a href="https://">', after: '</a>' },
+  { id: 'ul', label: 'List', title: 'Bullet list', before: '<ul>\n  <li>', after: '</li>\n</ul>' },
+  { id: 'h2', label: 'H2', title: 'Heading', before: '<h2>', after: '</h2>' },
+  { id: 'hr', label: '— —', title: 'Separator', before: '<hr>', after: '' },
+  { id: 'br', label: 'Br', title: 'Line break', before: '<br>', after: '' }
+]
+
 const bodyPlaceholder = computed(() =>
   form.value.body_format === 'html'
     ? t('admin.emailBroadcast.form.bodyPlaceholderHtml')
@@ -288,11 +356,25 @@ watch(
   show => {
     if (show) {
       resetForm()
+      nextTick(() => schedulePreview(true))
     } else {
       recipientPickerOpen.value = false
+      cancelPendingPreview()
     }
   }
 )
+
+watch(
+  () => [form.value.subject, form.value.body, form.value.body_format],
+  () => {
+    if (props.show) schedulePreview(false)
+  },
+  { deep: false }
+)
+
+onBeforeUnmount(() => {
+  cancelPendingPreview()
+})
 
 function resetForm() {
   form.value.subject = ''
@@ -303,10 +385,83 @@ function resetForm() {
   recipientSearch.value = ''
   recipientCandidates.value = []
   errorMessage.value = ''
+  previewError.value = false
 }
 
 function handleClose() {
   emit('close')
+}
+
+function schedulePreview(immediate: boolean) {
+  if (previewTimer) clearTimeout(previewTimer)
+  const delay = immediate ? 0 : 350
+  previewTimer = setTimeout(() => {
+    void refreshPreview()
+  }, delay)
+}
+
+function cancelPendingPreview() {
+  if (previewTimer) {
+    clearTimeout(previewTimer)
+    previewTimer = null
+  }
+  if (previewAbort) {
+    previewAbort.abort()
+    previewAbort = null
+  }
+}
+
+async function refreshPreview() {
+  if (!props.show) return
+  if (previewAbort) previewAbort.abort()
+  const ctrl = new AbortController()
+  previewAbort = ctrl
+  previewLoading.value = true
+  previewError.value = false
+  try {
+    const result = await adminAPI.emailBroadcasts.preview(
+      {
+        subject: form.value.subject || t('admin.emailBroadcast.preview.placeholderSubject'),
+        body: form.value.body || t('admin.emailBroadcast.preview.placeholderBody'),
+        body_format: form.value.body_format
+      },
+      { signal: ctrl.signal }
+    )
+    if (ctrl.signal.aborted) return
+    writeIframe(result.html)
+  } catch (err: any) {
+    if (err?.code === 'ERR_CANCELED' || err?.name === 'CanceledError' || err?.name === 'AbortError') return
+    previewError.value = true
+    console.error('preview failed', err)
+  } finally {
+    if (previewAbort === ctrl) previewAbort = null
+    previewLoading.value = false
+  }
+}
+
+function writeIframe(html: string) {
+  const iframe = previewIframeRef.value
+  if (!iframe) return
+  const doc = iframe.contentDocument
+  if (!doc) return
+  doc.open()
+  doc.write(html)
+  doc.close()
+}
+
+function insertSnippet(snippet: HTMLSnippet) {
+  const textarea = bodyTextareaRef.value
+  if (!textarea) return
+  const start = textarea.selectionStart ?? form.value.body.length
+  const end = textarea.selectionEnd ?? form.value.body.length
+  const selection = form.value.body.slice(start, end)
+  const next = form.value.body.slice(0, start) + snippet.before + selection + snippet.after + form.value.body.slice(end)
+  form.value.body = next
+  nextTick(() => {
+    textarea.focus()
+    const caret = start + snippet.before.length + selection.length
+    textarea.setSelectionRange(caret, caret)
+  })
 }
 
 function handleRecipientSearch() {

@@ -101,11 +101,32 @@ async function searchRecipients(query: string, limit: number = 20): Promise<Sear
   return data
 }
 
+export interface PreviewBroadcastRequest {
+  subject: string
+  body: string
+  body_format: EmailBroadcastBodyFormat
+}
+
+export interface PreviewBroadcastResult {
+  html: string
+}
+
+async function preview(
+  request: PreviewBroadcastRequest,
+  options?: { signal?: AbortSignal }
+): Promise<PreviewBroadcastResult> {
+  const { data } = await apiClient.post<PreviewBroadcastResult>('/admin/email-broadcasts/preview', request, {
+    signal: options?.signal
+  })
+  return data
+}
+
 const emailBroadcastsAPI = {
   list,
   getById,
   create,
-  searchRecipients
+  searchRecipients,
+  preview
 }
 
 export default emailBroadcastsAPI

@@ -196,15 +196,41 @@ func TestDedupePositiveInt64s(t *testing.T) {
 
 func TestComposeHTMLBody_PlainTextEscapesAndPreservesNewlines(t *testing.T) {
 	svc, _ := newTestEmailBroadcastService()
-	got := svc.composeHTMLBody("<script>alert(1)</script>\nline2", EmailBroadcastBodyFormatText)
+	got := svc.composeHTMLBody("subj", "<script>alert(1)</script>\nline2", EmailBroadcastBodyFormatText, "MySite")
 	require.Contains(t, got, "&lt;script&gt;")
 	require.Contains(t, got, "<br>")
+	require.Contains(t, got, "MySite")
+	require.Contains(t, got, "subj")
+}
+
+func TestComposeHTMLBody_PlainTextSplitsParagraphsOnBlankLine(t *testing.T) {
+	svc, _ := newTestEmailBroadcastService()
+	got := svc.composeHTMLBody("s", "first paragraph\n\nsecond paragraph", EmailBroadcastBodyFormatText, "Site")
+	require.Contains(t, got, "first paragraph")
+	require.Contains(t, got, "second paragraph")
+	// Each paragraph wrapped in its own <p>
+	require.GreaterOrEqual(t, strings.Count(got, "<p"), 2)
 }
 
 func TestComposeHTMLBody_HTMLStripsDangerousTags(t *testing.T) {
 	svc, _ := newTestEmailBroadcastService()
-	got := svc.composeHTMLBody(`<p>safe</p><script>alert(1)</script><a href="https://example.com">link</a>`, EmailBroadcastBodyFormatHTML)
+	got := svc.composeHTMLBody("s", `<p>safe</p><script>alert(1)</script><a href="https://example.com">link</a>`, EmailBroadcastBodyFormatHTML, "Site")
 	require.Contains(t, got, "<p>safe</p>")
 	require.NotContains(t, got, "<script>")
 	require.Contains(t, got, "example.com")
+}
+
+func TestComposeHTMLBody_IncludesSubjectAndSiteName(t *testing.T) {
+	svc, _ := newTestEmailBroadcastService()
+	got := svc.composeHTMLBody("Welcome onboard!", "<p>hi</p>", EmailBroadcastBodyFormatHTML, "Acme Lab")
+	require.Contains(t, got, "Welcome onboard!")
+	require.Contains(t, got, "Acme Lab")
+}
+
+func TestPreviewHTML_UsesSiteNameWhenAvailable(t *testing.T) {
+	svc, _ := newTestEmailBroadcastService()
+	got := svc.PreviewHTML(context.Background(), "subj", "hi", EmailBroadcastBodyFormatText)
+	require.Contains(t, got, "subj")
+	// Stub settingRepo returns empty site_name → fallback to "Sub2API".
+	require.Contains(t, got, "Sub2API")
 }

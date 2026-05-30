@@ -4457,6 +4457,15 @@ export default {
         completed: 'Completed',
         failed: 'Failed'
       },
+      preview: {
+        title: 'Live preview',
+        refreshing: 'Refreshing…',
+        error: 'Failed to render preview',
+        hint: 'Preview matches the final delivered email exactly, including the card layout and site-name header.',
+        iframeTitle: 'Broadcast email preview',
+        placeholderSubject: '(Fill in subject on the left)',
+        placeholderBody: '(Compose the body on the left in HTML or plain text. The preview updates as you type.)'
+      },
       history: {
         title: 'Recent broadcasts (last 10)',
         empty: 'No broadcasts sent yet'

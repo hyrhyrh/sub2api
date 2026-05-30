@@ -348,6 +348,7 @@ func registerEmailBroadcastRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 	{
 		broadcasts.GET("", h.Admin.EmailBroadcast.List)
 		broadcasts.POST("", h.Admin.EmailBroadcast.Create)
+		broadcasts.POST("/preview", h.Admin.EmailBroadcast.Preview)
 		broadcasts.GET("/:id", h.Admin.EmailBroadcast.Get)
 		broadcasts.GET("/recipients/search", h.Admin.EmailBroadcast.SearchRecipients)
 	}

@@ -4610,6 +4610,15 @@ export default {
         completed: '已完成',
         failed: '失败'
       },
+      preview: {
+        title: '实时预览',
+        refreshing: '更新中…',
+        error: '预览生成失败',
+        hint: '预览结果与最终投递的邮件完全一致，已应用统一卡片排版与站点名头部。',
+        iframeTitle: '公告邮件预览',
+        placeholderSubject: '（在左侧填写邮件主题）',
+        placeholderBody: '（在左侧填写邮件正文，HTML 或纯文本格式均支持。预览实时刷新。）'
+      },
       history: {
         title: '发送历史（最近 10 条）',
         empty: '尚无发送记录'

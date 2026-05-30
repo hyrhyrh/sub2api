@@ -230,7 +230,8 @@ func (s *EmailBroadcastService) runBroadcast(id int64) {
 		return
 	}
 
-	htmlBody := s.composeHTMLBody(broadcast.Body, broadcast.BodyFormat)
+	siteName := s.resolveSiteName(ctx)
+	htmlBody := s.composeHTMLBody(broadcast.Subject, broadcast.Body, broadcast.BodyFormat, siteName)
 
 	started := time.Now()
 	total := len(emails)
@@ -353,30 +354,124 @@ func (s *EmailBroadcastService) resolveRecipientEmails(ctx context.Context, b *E
 	return emails, nil
 }
 
-// composeHTMLBody 根据 broadcast 的 body_format 生成最终的 HTML 邮件正文。
-// 纯文本会被 HTML-escape 并 <br> 替换换行，HTML 会经过 bluemonday sanitize。
-func (s *EmailBroadcastService) composeHTMLBody(body, format string) string {
-	switch format {
-	case EmailBroadcastBodyFormatText:
-		escaped := html.EscapeString(body)
-		escaped = strings.ReplaceAll(escaped, "\r\n", "\n")
-		escaped = strings.ReplaceAll(escaped, "\n", "<br>")
-		return wrapBroadcastHTMLShell(escaped)
-	case EmailBroadcastBodyFormatHTML:
-		sanitized := s.htmlSanitizer.Sanitize(body)
-		return wrapBroadcastHTMLShell(sanitized)
-	default:
-		return wrapBroadcastHTMLShell(html.EscapeString(body))
-	}
+// PreviewHTML 生成与最终投递一致的预览 HTML。
+// 不需要落库，主要给管理后台编辑器实时预览使用。
+//
+// PreviewHTML returns the exact HTML that would be sent for the given
+// subject + body + format. It is intentionally side-effect free so it can be
+// driven by the admin composer for live previewing.
+func (s *EmailBroadcastService) PreviewHTML(ctx context.Context, subject, body, format string) string {
+	siteName := s.resolveSiteName(ctx)
+	return s.composeHTMLBody(subject, body, format, siteName)
 }
 
-// wrapBroadcastHTMLShell 给正文包一层最简单的 HTML 容器。
-// 故意不引入站点 brand / footer，让公告内容更"管理员发的纯邮件"。
-func wrapBroadcastHTMLShell(inner string) string {
-	return fmt.Sprintf(`<!DOCTYPE html>
-<html><head><meta charset="UTF-8"></head><body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;line-height:1.6;color:#1f2937;">
+// composeHTMLBody 根据 broadcast 的 body_format 生成最终的 HTML 邮件正文。
+// 纯文本会被 HTML-escape、保留段落与换行；HTML 会经过 bluemonday sanitize。
+// 两种格式最终都使用统一的卡片式邮件模板，附 siteName 头部和系统签名页脚，
+// 与 sub2api 现有其他模板风格保持一致。
+func (s *EmailBroadcastService) composeHTMLBody(subject, body, format, siteName string) string {
+	var inner string
+	switch format {
+	case EmailBroadcastBodyFormatText:
+		inner = renderPlainTextAsHTML(body)
+	case EmailBroadcastBodyFormatHTML:
+		inner = s.htmlSanitizer.Sanitize(body)
+	default:
+		inner = html.EscapeString(body)
+	}
+	return wrapBroadcastHTMLShell(subject, siteName, inner)
+}
+
+// resolveSiteName 读取站点名,失败时回退到"Sub2API"。
+func (s *EmailBroadcastService) resolveSiteName(ctx context.Context) string {
+	if s.settingRepo == nil {
+		return "Sub2API"
+	}
+	if name, err := s.settingRepo.GetValue(ctx, SettingKeySiteName); err == nil {
+		if trimmed := strings.TrimSpace(name); trimmed != "" {
+			return trimmed
+		}
+	}
+	return "Sub2API"
+}
+
+// renderPlainTextAsHTML 把纯文本转成对应的 HTML 片段:
+//   - HTML-escape 防 XSS
+//   - 连续两个换行 -> 段落分隔 (<p>)
+//   - 单个换行    -> 行内换行 (<br>)
+// renderPlainTextAsHTML converts a plain-text body into HTML by escaping it,
+// splitting on blank lines into paragraphs and turning single line breaks into <br>.
+func renderPlainTextAsHTML(body string) string {
+	normalized := strings.ReplaceAll(body, "\r\n", "\n")
+	paragraphs := strings.Split(normalized, "\n\n")
+	parts := make([]string, 0, len(paragraphs))
+	for _, p := range paragraphs {
+		trimmed := strings.TrimSpace(p)
+		if trimmed == "" {
+			continue
+		}
+		escaped := html.EscapeString(trimmed)
+		escaped = strings.ReplaceAll(escaped, "\n", "<br>")
+		parts = append(parts, "<p style=\"margin:0 0 16px;\">"+escaped+"</p>")
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return strings.Join(parts, "\n")
+}
+
+const broadcastHTMLTemplate = `<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>%s</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f4f6f8;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;color:#1f2937;">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%%" style="background-color:#f4f6f8;padding:24px 12px;">
+        <tr>
+            <td align="center">
+                <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" style="max-width:600px;background-color:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 4px 16px rgba(15,23,42,0.06);">
+                    <tr>
+                        <td style="background:linear-gradient(135deg,#2563eb 0%%,#1d4ed8 100%%);padding:28px 32px;color:#ffffff;">
+                            <div style="font-size:13px;letter-spacing:0.06em;text-transform:uppercase;opacity:0.85;">%s</div>
+                            <h1 style="margin:6px 0 0;font-size:22px;line-height:1.35;font-weight:600;">%s</h1>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding:32px;font-size:15px;line-height:1.7;color:#1f2937;">
 %s
-</body></html>`, inner)
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="background-color:#f8fafc;padding:18px 32px;border-top:1px solid #eef2f7;color:#94a3b8;font-size:12px;line-height:1.5;text-align:center;">
+                            %s
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>`
+
+const broadcastFooterText = `此邮件由 %s 系统发送。<br>This email was sent by %s.`
+
+// wrapBroadcastHTMLShell 给正文 + 主题 + 站点名组合成最终邮件 HTML。
+func wrapBroadcastHTMLShell(subject, siteName, inner string) string {
+	escapedSubject := html.EscapeString(strings.TrimSpace(subject))
+	if escapedSubject == "" {
+		escapedSubject = "Announcement"
+	}
+	escapedSite := html.EscapeString(strings.TrimSpace(siteName))
+	if escapedSite == "" {
+		escapedSite = "Sub2API"
+	}
+	if strings.TrimSpace(inner) == "" {
+		inner = "<p style=\"margin:0;\"></p>"
+	}
+	footer := fmt.Sprintf(broadcastFooterText, escapedSite, escapedSite)
+	return fmt.Sprintf(broadcastHTMLTemplate, escapedSubject, escapedSite, escapedSubject, inner, footer)
 }
 
 // markRunning 防止同一个 broadcast 被并发触发两次。
