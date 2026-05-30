@@ -121,12 +121,17 @@ async function preview(
   return data
 }
 
+async function deleteBroadcast(id: number): Promise<void> {
+  await apiClient.delete(`/admin/email-broadcasts/${id}`)
+}
+
 const emailBroadcastsAPI = {
   list,
   getById,
   create,
   searchRecipients,
-  preview
+  preview,
+  delete: deleteBroadcast
 }
 
 export default emailBroadcastsAPI

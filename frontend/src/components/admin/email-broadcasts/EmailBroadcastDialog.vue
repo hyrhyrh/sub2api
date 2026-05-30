@@ -188,49 +188,162 @@
       </div>
     </div>
 
-    <!-- History -->
+    <!-- History (master-detail) -->
     <div class="mt-6 border-t border-gray-100 pt-4 dark:border-dark-700">
       <button
         type="button"
         class="flex w-full items-center justify-between rounded-lg border border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-dark-700 dark:text-gray-300 dark:hover:bg-dark-700"
         @click="toggleHistory"
       >
-        <span>{{ t('admin.emailBroadcast.history.title') }}</span>
+        <span>
+          {{ t('admin.emailBroadcast.history.title') }}
+          <span v-if="historyView === 'detail' && historyDetail" class="ml-2 text-xs font-normal text-gray-500">
+            / {{ historyDetail.subject }}
+          </span>
+        </span>
         <span class="text-xs text-gray-500">{{ historyExpanded ? '▲' : '▼' }}</span>
       </button>
-      <div v-if="historyExpanded" class="mt-3 space-y-2">
-        <div v-if="historyLoading" class="py-4 text-center text-sm text-gray-500">
-          {{ t('common.loading') }}
+
+      <div v-if="historyExpanded" class="mt-3">
+        <!-- LIST VIEW -->
+        <div v-if="historyView === 'list'" class="space-y-2">
+          <div v-if="historyLoading" class="py-4 text-center text-sm text-gray-500">
+            {{ t('common.loading') }}
+          </div>
+          <div v-else-if="historyItems.length === 0" class="py-4 text-center text-sm text-gray-500">
+            {{ t('admin.emailBroadcast.history.empty') }}
+          </div>
+          <ul v-else class="divide-y divide-gray-100 dark:divide-dark-700">
+            <li
+              v-for="item in historyItems"
+              :key="item.id"
+              class="flex flex-col gap-2 py-3 text-sm sm:flex-row sm:items-center sm:justify-between"
+            >
+              <div class="min-w-0 flex-1">
+                <div class="truncate font-medium text-gray-900 dark:text-white">{{ item.subject }}</div>
+                <div class="text-xs text-gray-500 dark:text-gray-400">
+                  {{ formatDateTime(item.created_at) }}
+                  &middot;
+                  {{ t(`admin.emailBroadcast.recipientsMode.${item.recipients_mode}`) }}
+                </div>
+              </div>
+              <div class="flex flex-wrap items-center gap-2 text-xs sm:gap-3">
+                <span class="rounded-full px-2 py-0.5" :class="statusBadgeClass(item.status)">
+                  {{ t(`admin.emailBroadcast.status.${item.status}`) }}
+                </span>
+                <span class="text-gray-500 dark:text-gray-400">
+                  {{ item.success_count }} / {{ item.total_count }}
+                </span>
+                <button
+                  type="button"
+                  class="rounded-md border border-gray-200 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-dark-700 dark:text-gray-300 dark:hover:bg-dark-700"
+                  :title="t('admin.emailBroadcast.history.preview')"
+                  @click="openHistoryDetail(item.id)"
+                >
+                  {{ t('admin.emailBroadcast.history.preview') }}
+                </button>
+                <button
+                  type="button"
+                  class="rounded-md border border-red-200 px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-900/60 dark:text-red-300 dark:hover:bg-red-900/30"
+                  :title="t('admin.emailBroadcast.history.delete')"
+                  :disabled="!canDelete(item.status)"
+                  @click="askDeleteHistory(item)"
+                >
+                  {{ t('admin.emailBroadcast.history.delete') }}
+                </button>
+              </div>
+            </li>
+          </ul>
         </div>
-        <div v-else-if="historyItems.length === 0" class="py-4 text-center text-sm text-gray-500">
-          {{ t('admin.emailBroadcast.history.empty') }}
-        </div>
-        <ul v-else class="divide-y divide-gray-100 dark:divide-dark-700">
-          <li
-            v-for="item in historyItems"
-            :key="item.id"
-            class="flex flex-col gap-1 py-3 text-sm sm:flex-row sm:items-center sm:justify-between"
-          >
-            <div class="min-w-0 flex-1">
-              <div class="truncate font-medium text-gray-900 dark:text-white">{{ item.subject }}</div>
-              <div class="text-xs text-gray-500 dark:text-gray-400">
-                {{ formatDateTime(item.created_at) }}
-                &middot;
-                {{ t(`admin.emailBroadcast.recipientsMode.${item.recipients_mode}`) }}
+
+        <!-- DETAIL VIEW -->
+        <div v-else-if="historyView === 'detail'" class="space-y-3">
+          <div class="flex items-center justify-between">
+            <button
+              type="button"
+              class="inline-flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
+              @click="backToHistoryList"
+            >
+              <span>←</span>
+              {{ t('admin.emailBroadcast.history.backToList') }}
+            </button>
+            <div v-if="historyDetail" class="flex items-center gap-2">
+              <button
+                type="button"
+                class="rounded-md border border-red-200 px-3 py-1 text-xs font-medium text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-900/60 dark:text-red-300 dark:hover:bg-red-900/30"
+                :disabled="!canDelete(historyDetail.status)"
+                @click="askDeleteHistory(historyDetail)"
+              >
+                {{ t('admin.emailBroadcast.history.delete') }}
+              </button>
+            </div>
+          </div>
+
+          <div v-if="historyDetailLoading" class="py-6 text-center text-sm text-gray-500">
+            {{ t('common.loading') }}
+          </div>
+          <div v-else-if="historyDetailError" class="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-300">
+            {{ historyDetailError }}
+          </div>
+          <div v-else-if="historyDetail" class="space-y-3">
+            <div class="grid gap-2 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-xs sm:grid-cols-2 dark:border-dark-700 dark:bg-dark-800">
+              <div>
+                <div class="text-gray-500 dark:text-gray-400">{{ t('admin.emailBroadcast.history.detail.subject') }}</div>
+                <div class="mt-0.5 font-medium text-gray-900 dark:text-white">{{ historyDetail.subject }}</div>
+              </div>
+              <div>
+                <div class="text-gray-500 dark:text-gray-400">{{ t('admin.emailBroadcast.history.detail.status') }}</div>
+                <div class="mt-0.5">
+                  <span class="rounded-full px-2 py-0.5" :class="statusBadgeClass(historyDetail.status)">
+                    {{ t(`admin.emailBroadcast.status.${historyDetail.status}`) }}
+                  </span>
+                </div>
+              </div>
+              <div>
+                <div class="text-gray-500 dark:text-gray-400">{{ t('admin.emailBroadcast.history.detail.recipients') }}</div>
+                <div class="mt-0.5 text-gray-900 dark:text-white">
+                  {{ t(`admin.emailBroadcast.recipientsMode.${historyDetail.recipients_mode}`) }}
+                  <span class="text-gray-500 dark:text-gray-400">
+                    ({{ historyDetail.success_count }} / {{ historyDetail.total_count }})
+                  </span>
+                </div>
+              </div>
+              <div>
+                <div class="text-gray-500 dark:text-gray-400">{{ t('admin.emailBroadcast.history.detail.sentAt') }}</div>
+                <div class="mt-0.5 text-gray-900 dark:text-white">
+                  {{ historyDetail.finished_at ? formatDateTime(historyDetail.finished_at) : formatDateTime(historyDetail.created_at) }}
+                </div>
+              </div>
+              <div v-if="historyDetail.error_message" class="sm:col-span-2">
+                <div class="text-gray-500 dark:text-gray-400">{{ t('admin.emailBroadcast.history.detail.errorMessage') }}</div>
+                <div class="mt-0.5 break-all text-red-600 dark:text-red-300">{{ historyDetail.error_message }}</div>
               </div>
             </div>
-            <div class="flex items-center gap-3 text-xs">
-              <span class="rounded-full px-2 py-0.5" :class="statusBadgeClass(item.status)">
-                {{ t(`admin.emailBroadcast.status.${item.status}`) }}
-              </span>
-              <span class="text-gray-500 dark:text-gray-400">
-                {{ item.success_count }} / {{ item.total_count }}
-              </span>
+
+            <div class="rounded-lg border border-gray-200 bg-gray-50 dark:border-dark-700 dark:bg-dark-800">
+              <iframe
+                class="block h-[480px] w-full rounded-lg bg-white"
+                sandbox="allow-same-origin"
+                :srcdoc="historyDetailHtml"
+                :title="t('admin.emailBroadcast.history.detail.iframeTitle')"
+              />
             </div>
-          </li>
-        </ul>
+          </div>
+        </div>
       </div>
     </div>
+
+    <!-- Hard-delete confirm dialog -->
+    <ConfirmDialog
+      :show="deleteConfirm.show"
+      :title="t('admin.emailBroadcast.history.deleteConfirmTitle')"
+      :message="deleteConfirm.message"
+      :confirm-text="t('admin.emailBroadcast.history.delete')"
+      :cancel-text="t('common.cancel')"
+      danger
+      @confirm="confirmDeleteHistory"
+      @cancel="cancelDeleteHistory"
+    />
 
     <template #footer>
       <div class="flex items-center justify-end gap-3">
@@ -262,10 +375,12 @@
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import BaseDialog from '@/components/common/BaseDialog.vue'
+import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import { useAppStore } from '@/stores/app'
 import { adminAPI } from '@/api/admin'
 import { formatDateTime } from '@/utils/format'
 import type {
+  EmailBroadcast,
   EmailBroadcastBodyFormat,
   EmailBroadcastRecipientCandidate,
   EmailBroadcastStatus,
@@ -313,6 +428,22 @@ const errorMessage = ref('')
 const historyExpanded = ref(false)
 const historyLoading = ref(false)
 const historyItems = ref<EmailBroadcastSummary[]>([])
+const historyView = ref<'list' | 'detail'>('list')
+const historyDetail = ref<EmailBroadcast | null>(null)
+const historyDetailHtml = ref('')
+const historyDetailLoading = ref(false)
+const historyDetailError = ref('')
+
+const deleteConfirm = ref<{
+  show: boolean
+  message: string
+  target: EmailBroadcastSummary | EmailBroadcast | null
+}>({
+  show: false,
+  message: '',
+  target: null
+})
+const deleting = ref(false)
 
 const previewIframeRef = ref<HTMLIFrameElement | null>(null)
 const bodyTextareaRef = ref<HTMLTextAreaElement | null>(null)
@@ -395,6 +526,11 @@ function resetForm() {
   errorMessage.value = ''
   previewError.value = false
   previewHtml.value = ''
+  historyView.value = 'list'
+  historyDetail.value = null
+  historyDetailHtml.value = ''
+  historyDetailError.value = ''
+  deleteConfirm.value = { show: false, message: '', target: null }
 }
 
 function handleClose() {
@@ -537,6 +673,73 @@ async function loadHistory() {
     console.error('load broadcast history failed', err)
   } finally {
     historyLoading.value = false
+  }
+}
+
+function backToHistoryList() {
+  historyView.value = 'list'
+  historyDetail.value = null
+  historyDetailHtml.value = ''
+  historyDetailError.value = ''
+}
+
+async function openHistoryDetail(id: number) {
+  historyView.value = 'detail'
+  historyDetail.value = null
+  historyDetailHtml.value = ''
+  historyDetailError.value = ''
+  historyDetailLoading.value = true
+  try {
+    const detail = await adminAPI.emailBroadcasts.getById(id)
+    historyDetail.value = detail
+    // Re-render the same HTML the recipient saw, server-side.
+    const result = await adminAPI.emailBroadcasts.preview({
+      subject: detail.subject,
+      body: detail.body,
+      body_format: detail.body_format
+    })
+    historyDetailHtml.value = result.html
+  } catch (err: any) {
+    console.error('load broadcast detail failed', err)
+    historyDetailError.value = err?.response?.data?.message || err?.message || t('common.unknownError')
+  } finally {
+    historyDetailLoading.value = false
+  }
+}
+
+function canDelete(status: EmailBroadcastStatus): boolean {
+  return status === 'completed' || status === 'failed'
+}
+
+function askDeleteHistory(target: EmailBroadcastSummary | EmailBroadcast) {
+  deleteConfirm.value = {
+    show: true,
+    message: t('admin.emailBroadcast.history.deleteConfirm', { subject: target.subject }),
+    target
+  }
+}
+
+function cancelDeleteHistory() {
+  deleteConfirm.value = { show: false, message: '', target: null }
+}
+
+async function confirmDeleteHistory() {
+  const target = deleteConfirm.value.target
+  if (!target || deleting.value) return
+  deleting.value = true
+  try {
+    await adminAPI.emailBroadcasts.delete(target.id)
+    historyItems.value = historyItems.value.filter(item => item.id !== target.id)
+    if (historyDetail.value?.id === target.id) {
+      backToHistoryList()
+    }
+    appStore.showSuccess(t('admin.emailBroadcast.notifications.deleteSuccess'))
+  } catch (err: any) {
+    const msg = err?.response?.data?.message || err?.message || t('common.unknownError')
+    appStore.showError(msg)
+  } finally {
+    deleting.value = false
+    cancelDeleteHistory()
   }
 }
 

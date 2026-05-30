@@ -4631,11 +4631,25 @@ export default {
       },
       history: {
         title: '发送历史（最近 10 条）',
-        empty: '尚无发送记录'
+        empty: '尚无发送记录',
+        preview: '预览',
+        delete: '删除',
+        backToList: '返回历史列表',
+        deleteConfirmTitle: '删除发送记录',
+        deleteConfirm: '确定要删除「{subject}」的发送记录吗？此操作无法撤销。',
+        detail: {
+          subject: '主题',
+          status: '状态',
+          recipients: '收件人',
+          sentAt: '发送时间',
+          errorMessage: '错误信息',
+          iframeTitle: '历史邮件预览'
+        }
       },
       notifications: {
         sendQueued: '公告邮件已加入发送队列（#{id}），可稍后在历史中查看进度。',
-        loadHistoryFailed: '加载发送历史失败'
+        loadHistoryFailed: '加载发送历史失败',
+        deleteSuccess: '已删除发送记录'
       }
     },
 

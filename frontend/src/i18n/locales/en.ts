@@ -4478,11 +4478,25 @@ export default {
       },
       history: {
         title: 'Recent broadcasts (last 10)',
-        empty: 'No broadcasts sent yet'
+        empty: 'No broadcasts sent yet',
+        preview: 'Preview',
+        delete: 'Delete',
+        backToList: 'Back to history',
+        deleteConfirmTitle: 'Delete broadcast',
+        deleteConfirm: 'Delete the broadcast "{subject}"? This action cannot be undone.',
+        detail: {
+          subject: 'Subject',
+          status: 'Status',
+          recipients: 'Recipients',
+          sentAt: 'Sent at',
+          errorMessage: 'Error',
+          iframeTitle: 'Historical broadcast preview'
+        }
       },
       notifications: {
         sendQueued: 'Broadcast #{id} queued for delivery. Watch progress in the history list.',
-        loadHistoryFailed: 'Failed to load broadcast history'
+        loadHistoryFailed: 'Failed to load broadcast history',
+        deleteSuccess: 'Broadcast deleted'
       }
     },
 
