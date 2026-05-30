@@ -1,0 +1,210 @@
+package service
+
+import (
+	"context"
+	"errors"
+	"strings"
+	"testing"
+
+	"github.com/Wei-Shaw/sub2api/internal/domain"
+	"github.com/stretchr/testify/require"
+)
+
+type emailBroadcastRepoStub struct {
+	created *EmailBroadcast
+	listErr error
+	listOut *EmailBroadcastListResult
+	getErr  error
+	getOut  *EmailBroadcast
+	patches []EmailBroadcastStatusUpdate
+}
+
+func (s *emailBroadcastRepoStub) Create(_ context.Context, b *EmailBroadcast) error {
+	cp := *b
+	cp.ID = 1
+	s.created = &cp
+	b.ID = 1
+	return nil
+}
+
+func (s *emailBroadcastRepoStub) GetByID(_ context.Context, _ int64) (*EmailBroadcast, error) {
+	if s.getErr != nil {
+		return nil, s.getErr
+	}
+	if s.getOut != nil {
+		return s.getOut, nil
+	}
+	if s.created == nil {
+		return nil, ErrEmailBroadcastNotFound
+	}
+	cp := *s.created
+	return &cp, nil
+}
+
+func (s *emailBroadcastRepoStub) UpdateStatus(_ context.Context, _ int64, patch EmailBroadcastStatusUpdate) error {
+	s.patches = append(s.patches, patch)
+	return nil
+}
+
+func (s *emailBroadcastRepoStub) List(_ context.Context, _ EmailBroadcastListParams) (*EmailBroadcastListResult, error) {
+	if s.listErr != nil {
+		return nil, s.listErr
+	}
+	if s.listOut == nil {
+		return &EmailBroadcastListResult{Items: []EmailBroadcast{}}, nil
+	}
+	return s.listOut, nil
+}
+
+// settingRepoStubNoSMTP returns no SMTP host so GetSMTPConfig fails with ErrEmailNotConfigured.
+type settingRepoStubNoSMTP struct{}
+
+func (settingRepoStubNoSMTP) Get(context.Context, string) (*Setting, error) {
+	return nil, errors.New("not configured")
+}
+func (settingRepoStubNoSMTP) GetValue(context.Context, string) (string, error) {
+	return "", errors.New("not configured")
+}
+func (settingRepoStubNoSMTP) Set(context.Context, string, string) error { return nil }
+func (settingRepoStubNoSMTP) GetMultiple(_ context.Context, keys []string) (map[string]string, error) {
+	out := make(map[string]string, len(keys))
+	for _, k := range keys {
+		out[k] = ""
+	}
+	return out, nil
+}
+func (settingRepoStubNoSMTP) SetMultiple(context.Context, map[string]string) error { return nil }
+func (settingRepoStubNoSMTP) GetAll(context.Context) (map[string]string, error) {
+	return map[string]string{}, nil
+}
+func (settingRepoStubNoSMTP) Delete(context.Context, string) error { return nil }
+
+func newTestEmailBroadcastService() (*EmailBroadcastService, *emailBroadcastRepoStub) {
+	repo := &emailBroadcastRepoStub{}
+	emailSvc := NewEmailService(settingRepoStubNoSMTP{}, nil)
+	svc := NewEmailBroadcastService(repo, nil, emailSvc, settingRepoStubNoSMTP{})
+	return svc, repo
+}
+
+func TestEmailBroadcastSend_RejectsEmptySubject(t *testing.T) {
+	svc, _ := newTestEmailBroadcastService()
+	_, err := svc.Send(context.Background(), EmailBroadcastSendInput{
+		Subject:        "  ",
+		Body:           "hello",
+		RecipientsMode: EmailBroadcastRecipientsModeSelected,
+		RecipientUserIDs: []int64{1},
+	})
+	require.ErrorIs(t, err, ErrEmailBroadcastSubjectRequired)
+}
+
+func TestEmailBroadcastSend_RejectsEmptyBody(t *testing.T) {
+	svc, _ := newTestEmailBroadcastService()
+	_, err := svc.Send(context.Background(), EmailBroadcastSendInput{
+		Subject:          "subject",
+		Body:             "",
+		RecipientsMode:   EmailBroadcastRecipientsModeSelected,
+		RecipientUserIDs: []int64{1},
+	})
+	require.ErrorIs(t, err, ErrEmailBroadcastBodyRequired)
+}
+
+func TestEmailBroadcastSend_RejectsSubjectTooLong(t *testing.T) {
+	svc, _ := newTestEmailBroadcastService()
+	_, err := svc.Send(context.Background(), EmailBroadcastSendInput{
+		Subject:          strings.Repeat("a", domain.EmailBroadcastSubjectMaxLen+1),
+		Body:             "hello",
+		RecipientsMode:   EmailBroadcastRecipientsModeSelected,
+		RecipientUserIDs: []int64{1},
+	})
+	require.ErrorIs(t, err, ErrEmailBroadcastSubjectTooLong)
+}
+
+func TestEmailBroadcastSend_RejectsBodyTooLong(t *testing.T) {
+	svc, _ := newTestEmailBroadcastService()
+	_, err := svc.Send(context.Background(), EmailBroadcastSendInput{
+		Subject:          "subject",
+		Body:             strings.Repeat("a", domain.EmailBroadcastBodyMaxLen+1),
+		RecipientsMode:   EmailBroadcastRecipientsModeSelected,
+		RecipientUserIDs: []int64{1},
+	})
+	require.ErrorIs(t, err, ErrEmailBroadcastBodyTooLong)
+}
+
+func TestEmailBroadcastSend_RejectsBadFormat(t *testing.T) {
+	svc, _ := newTestEmailBroadcastService()
+	_, err := svc.Send(context.Background(), EmailBroadcastSendInput{
+		Subject:          "s",
+		Body:             "b",
+		BodyFormat:       "markdown",
+		RecipientsMode:   EmailBroadcastRecipientsModeSelected,
+		RecipientUserIDs: []int64{1},
+	})
+	require.ErrorIs(t, err, ErrEmailBroadcastInvalidBodyFormat)
+}
+
+func TestEmailBroadcastSend_RejectsBadMode(t *testing.T) {
+	svc, _ := newTestEmailBroadcastService()
+	_, err := svc.Send(context.Background(), EmailBroadcastSendInput{
+		Subject:        "s",
+		Body:           "b",
+		RecipientsMode: "everyone",
+	})
+	require.ErrorIs(t, err, ErrEmailBroadcastInvalidMode)
+}
+
+func TestEmailBroadcastSend_RejectsSelectedWithoutRecipients(t *testing.T) {
+	svc, _ := newTestEmailBroadcastService()
+	_, err := svc.Send(context.Background(), EmailBroadcastSendInput{
+		Subject:        "s",
+		Body:           "b",
+		RecipientsMode: EmailBroadcastRecipientsModeSelected,
+	})
+	require.ErrorIs(t, err, ErrEmailBroadcastNoRecipients)
+}
+
+func TestEmailBroadcastSend_RejectsTooManyRecipients(t *testing.T) {
+	svc, _ := newTestEmailBroadcastService()
+	ids := make([]int64, 0, domain.EmailBroadcastMaxSelectedRecipients+1)
+	for i := 0; i < domain.EmailBroadcastMaxSelectedRecipients+1; i++ {
+		ids = append(ids, int64(i+1))
+	}
+	_, err := svc.Send(context.Background(), EmailBroadcastSendInput{
+		Subject:          "s",
+		Body:             "b",
+		RecipientsMode:   EmailBroadcastRecipientsModeSelected,
+		RecipientUserIDs: ids,
+	})
+	require.ErrorIs(t, err, ErrEmailBroadcastTooManyRecipients)
+}
+
+func TestEmailBroadcastSend_RejectsWhenSMTPNotConfigured(t *testing.T) {
+	svc, _ := newTestEmailBroadcastService()
+	_, err := svc.Send(context.Background(), EmailBroadcastSendInput{
+		Subject:          "s",
+		Body:             "b",
+		RecipientsMode:   EmailBroadcastRecipientsModeSelected,
+		RecipientUserIDs: []int64{1, 2, 3},
+	})
+	require.ErrorIs(t, err, ErrEmailBroadcastEmailNotConfigured)
+}
+
+func TestDedupePositiveInt64s(t *testing.T) {
+	in := []int64{0, 1, 1, 2, -3, 2, 4}
+	out := dedupePositiveInt64s(in)
+	require.Equal(t, []int64{1, 2, 4}, out)
+}
+
+func TestComposeHTMLBody_PlainTextEscapesAndPreservesNewlines(t *testing.T) {
+	svc, _ := newTestEmailBroadcastService()
+	got := svc.composeHTMLBody("<script>alert(1)</script>\nline2", EmailBroadcastBodyFormatText)
+	require.Contains(t, got, "&lt;script&gt;")
+	require.Contains(t, got, "<br>")
+}
+
+func TestComposeHTMLBody_HTMLStripsDangerousTags(t *testing.T) {
+	svc, _ := newTestEmailBroadcastService()
+	got := svc.composeHTMLBody(`<p>safe</p><script>alert(1)</script><a href="https://example.com">link</a>`, EmailBroadcastBodyFormatHTML)
+	require.Contains(t, got, "<p>safe</p>")
+	require.NotContains(t, got, "<script>")
+	require.Contains(t, got, "example.com")
+}
