@@ -177,7 +177,8 @@
           <iframe
             ref="previewIframeRef"
             class="block h-[560px] w-full rounded-lg bg-white"
-            sandbox=""
+            sandbox="allow-same-origin"
+            :srcdoc="previewHtml"
             :title="t('admin.emailBroadcast.preview.iframeTitle')"
           />
         </div>
@@ -317,6 +318,7 @@ const previewIframeRef = ref<HTMLIFrameElement | null>(null)
 const bodyTextareaRef = ref<HTMLTextAreaElement | null>(null)
 const previewLoading = ref(false)
 const previewError = ref(false)
+const previewHtml = ref('')
 let previewTimer: ReturnType<typeof setTimeout> | null = null
 let previewAbort: AbortController | null = null
 
@@ -386,6 +388,7 @@ function resetForm() {
   recipientCandidates.value = []
   errorMessage.value = ''
   previewError.value = false
+  previewHtml.value = ''
 }
 
 function handleClose() {
@@ -428,7 +431,7 @@ async function refreshPreview() {
       { signal: ctrl.signal }
     )
     if (ctrl.signal.aborted) return
-    writeIframe(result.html)
+    previewHtml.value = result.html
   } catch (err: any) {
     if (err?.code === 'ERR_CANCELED' || err?.name === 'CanceledError' || err?.name === 'AbortError') return
     previewError.value = true
@@ -437,16 +440,6 @@ async function refreshPreview() {
     if (previewAbort === ctrl) previewAbort = null
     previewLoading.value = false
   }
-}
-
-function writeIframe(html: string) {
-  const iframe = previewIframeRef.value
-  if (!iframe) return
-  const doc = iframe.contentDocument
-  if (!doc) return
-  doc.open()
-  doc.write(html)
-  doc.close()
 }
 
 function insertSnippet(snippet: HTMLSnippet) {
