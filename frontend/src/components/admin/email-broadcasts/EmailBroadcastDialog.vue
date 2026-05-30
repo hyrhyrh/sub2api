@@ -325,21 +325,27 @@ let previewAbort: AbortController | null = null
 interface HTMLSnippet {
   id: string
   label: string
-  title: string
   before: string
   after: string
 }
 
-const htmlSnippets: HTMLSnippet[] = [
-  { id: 'p', label: 'P', title: 'Paragraph', before: '<p>', after: '</p>' },
-  { id: 'b', label: 'B', title: 'Bold', before: '<strong>', after: '</strong>' },
-  { id: 'i', label: 'I', title: 'Italic', before: '<em>', after: '</em>' },
-  { id: 'a', label: 'Link', title: 'Link', before: '<a href="https://">', after: '</a>' },
-  { id: 'ul', label: 'List', title: 'Bullet list', before: '<ul>\n  <li>', after: '</li>\n</ul>' },
-  { id: 'h2', label: 'H2', title: 'Heading', before: '<h2>', after: '</h2>' },
-  { id: 'hr', label: '— —', title: 'Separator', before: '<hr>', after: '' },
-  { id: 'br', label: 'Br', title: 'Line break', before: '<br>', after: '' }
+const htmlSnippetDefs: HTMLSnippet[] = [
+  { id: 'p', label: 'P', before: '<p>', after: '</p>' },
+  { id: 'b', label: 'B', before: '<strong>', after: '</strong>' },
+  { id: 'i', label: 'I', before: '<em>', after: '</em>' },
+  { id: 'a', label: 'Link', before: '<a href="https://">', after: '</a>' },
+  { id: 'ul', label: 'List', before: '<ul>\n  <li>', after: '</li>\n</ul>' },
+  { id: 'h2', label: 'H2', before: '<h2>', after: '</h2>' },
+  { id: 'hr', label: '— —', before: '<hr>', after: '' },
+  { id: 'br', label: 'Br', before: '<br>', after: '' }
 ]
+
+const htmlSnippets = computed(() =>
+  htmlSnippetDefs.map(s => ({
+    ...s,
+    title: t(`admin.emailBroadcast.toolbar.${s.id}`)
+  }))
+)
 
 const bodyPlaceholder = computed(() =>
   form.value.body_format === 'html'

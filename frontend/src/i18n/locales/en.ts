@@ -4466,6 +4466,16 @@ export default {
         placeholderSubject: '(Fill in subject on the left)',
         placeholderBody: '(Compose the body on the left in HTML or plain text. The preview updates as you type.)'
       },
+      toolbar: {
+        p: 'Paragraph (wrap selection in <p>)',
+        b: 'Bold (wrap selection in <strong>)',
+        i: 'Italic (wrap selection in <em>)',
+        a: 'Insert link (wrap selection in <a href>)',
+        ul: 'Bullet list (insert <ul><li>)',
+        h2: 'Heading 2 (wrap selection in <h2>)',
+        hr: 'Horizontal rule (insert <hr>)',
+        br: 'Line break (insert <br>)'
+      },
       history: {
         title: 'Recent broadcasts (last 10)',
         empty: 'No broadcasts sent yet'

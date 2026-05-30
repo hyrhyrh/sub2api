@@ -4619,6 +4619,16 @@ export default {
         placeholderSubject: '（在左侧填写邮件主题）',
         placeholderBody: '（在左侧填写邮件正文，HTML 或纯文本格式均支持。预览实时刷新。）'
       },
+      toolbar: {
+        p: '段落（包裹选中文本为 <p>）',
+        b: '加粗（包裹为 <strong>）',
+        i: '斜体（包裹为 <em>）',
+        a: '插入链接（包裹为 <a href>）',
+        ul: '无序列表（插入 <ul><li>）',
+        h2: '二级标题（包裹为 <h2>）',
+        hr: '分隔线（插入 <hr>）',
+        br: '换行（插入 <br>）'
+      },
       history: {
         title: '发送历史（最近 10 条）',
         empty: '尚无发送记录'
