@@ -231,6 +231,76 @@ func TestPreviewHTML_UsesSiteNameWhenAvailable(t *testing.T) {
 	svc, _ := newTestEmailBroadcastService()
 	got := svc.PreviewHTML(context.Background(), "subj", "hi", EmailBroadcastBodyFormatText)
 	require.Contains(t, got, "subj")
-	// Stub settingRepo returns empty site_name → fallback to "Sub2API".
+	// Stub settingRepo returns empty values → fallback to "Sub2API".
 	require.Contains(t, got, "Sub2API")
+}
+
+// settingRepoStubWithValues lets a test pre-seed setting values.
+type settingRepoStubWithValues struct {
+	values map[string]string
+}
+
+func (s *settingRepoStubWithValues) Get(_ context.Context, key string) (*Setting, error) {
+	if v, ok := s.values[key]; ok {
+		return &Setting{Key: key, Value: v}, nil
+	}
+	return nil, errors.New("not set")
+}
+func (s *settingRepoStubWithValues) GetValue(_ context.Context, key string) (string, error) {
+	if v, ok := s.values[key]; ok {
+		return v, nil
+	}
+	return "", errors.New("not set")
+}
+func (s *settingRepoStubWithValues) Set(context.Context, string, string) error { return nil }
+func (s *settingRepoStubWithValues) GetMultiple(_ context.Context, keys []string) (map[string]string, error) {
+	out := make(map[string]string, len(keys))
+	for _, k := range keys {
+		out[k] = s.values[k]
+	}
+	return out, nil
+}
+func (s *settingRepoStubWithValues) SetMultiple(context.Context, map[string]string) error { return nil }
+func (s *settingRepoStubWithValues) GetAll(context.Context) (map[string]string, error) {
+	return s.values, nil
+}
+func (s *settingRepoStubWithValues) Delete(context.Context, string) error { return nil }
+
+func TestResolveSenderName_PrefersSMTPFromName(t *testing.T) {
+	repo := &settingRepoStubWithValues{
+		values: map[string]string{
+			SettingKeySMTPFromName: "TurboAPI",
+			SettingKeySiteName:     "Sub2API instance",
+		},
+	}
+	emailSvc := NewEmailService(repo, nil)
+	svc := NewEmailBroadcastService(&emailBroadcastRepoStub{}, nil, emailSvc, repo)
+	got := svc.resolveSenderName(context.Background())
+	require.Equal(t, "TurboAPI", got)
+}
+
+func TestResolveSenderName_FallsBackToSiteName(t *testing.T) {
+	repo := &settingRepoStubWithValues{
+		values: map[string]string{
+			SettingKeySMTPFromName: "  ",
+			SettingKeySiteName:     "My Site",
+		},
+	}
+	emailSvc := NewEmailService(repo, nil)
+	svc := NewEmailBroadcastService(&emailBroadcastRepoStub{}, nil, emailSvc, repo)
+	got := svc.resolveSenderName(context.Background())
+	require.Equal(t, "My Site", got)
+}
+
+func TestPreviewHTML_RendersSMTPFromNameInTemplate(t *testing.T) {
+	repo := &settingRepoStubWithValues{
+		values: map[string]string{
+			SettingKeySMTPFromName: "TurboAPI",
+		},
+	}
+	emailSvc := NewEmailService(repo, nil)
+	svc := NewEmailBroadcastService(&emailBroadcastRepoStub{}, nil, emailSvc, repo)
+	got := svc.PreviewHTML(context.Background(), "subj", "hi", EmailBroadcastBodyFormatText)
+	// Sender name should appear in header banner + footer (both zh + en strings).
+	require.GreaterOrEqual(t, strings.Count(got, "TurboAPI"), 3)
 }

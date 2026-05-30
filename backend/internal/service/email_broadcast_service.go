@@ -230,8 +230,8 @@ func (s *EmailBroadcastService) runBroadcast(id int64) {
 		return
 	}
 
-	siteName := s.resolveSiteName(ctx)
-	htmlBody := s.composeHTMLBody(broadcast.Subject, broadcast.Body, broadcast.BodyFormat, siteName)
+	senderName := s.resolveSenderName(ctx)
+	htmlBody := s.composeHTMLBody(broadcast.Subject, broadcast.Body, broadcast.BodyFormat, senderName)
 
 	started := time.Now()
 	total := len(emails)
@@ -361,15 +361,15 @@ func (s *EmailBroadcastService) resolveRecipientEmails(ctx context.Context, b *E
 // subject + body + format. It is intentionally side-effect free so it can be
 // driven by the admin composer for live previewing.
 func (s *EmailBroadcastService) PreviewHTML(ctx context.Context, subject, body, format string) string {
-	siteName := s.resolveSiteName(ctx)
-	return s.composeHTMLBody(subject, body, format, siteName)
+	senderName := s.resolveSenderName(ctx)
+	return s.composeHTMLBody(subject, body, format, senderName)
 }
 
 // composeHTMLBody 根据 broadcast 的 body_format 生成最终的 HTML 邮件正文。
 // 纯文本会被 HTML-escape、保留段落与换行；HTML 会经过 bluemonday sanitize。
-// 两种格式最终都使用统一的卡片式邮件模板，附 siteName 头部和系统签名页脚，
+// 两种格式最终都使用统一的卡片式邮件模板，附 senderName 头部和系统签名页脚，
 // 与 sub2api 现有其他模板风格保持一致。
-func (s *EmailBroadcastService) composeHTMLBody(subject, body, format, siteName string) string {
+func (s *EmailBroadcastService) composeHTMLBody(subject, body, format, senderName string) string {
 	var inner string
 	switch format {
 	case EmailBroadcastBodyFormatText:
@@ -379,15 +379,28 @@ func (s *EmailBroadcastService) composeHTMLBody(subject, body, format, siteName 
 	default:
 		inner = html.EscapeString(body)
 	}
-	return wrapBroadcastHTMLShell(subject, siteName, inner)
+	return wrapBroadcastHTMLShell(subject, senderName, inner)
 }
 
-// resolveSiteName 读取站点名,失败时回退到"Sub2API"。
-func (s *EmailBroadcastService) resolveSiteName(ctx context.Context) string {
+// resolveSenderName 读取邮件落款使用的"发件人名称":
+//   1. 优先使用 SMTP 配置里的 \"发件人名称\"(smtp_from_name)。这与收件人收件箱中看到的
+//      发件人显示名一致(SendEmailWithConfig 在 From 头里就用这个字段),邮件正文头
+//      与签名也跟着保持一致。
+//   2. 回退到站点名(site_name)。
+//   3. 仍然为空时回退到 \"Sub2API\"。
+//
+// resolveSenderName chooses the display name used in the email header banner and
+// system footer. It prefers the SMTP From-Name (the same name the inbox shows as
+// the sender), falling back to site_name and finally to "Sub2API".
+func (s *EmailBroadcastService) resolveSenderName(ctx context.Context) string {
 	if s.settingRepo == nil {
 		return "Sub2API"
 	}
-	if name, err := s.settingRepo.GetValue(ctx, SettingKeySiteName); err == nil {
+	for _, key := range []string{SettingKeySMTPFromName, SettingKeySiteName} {
+		name, err := s.settingRepo.GetValue(ctx, key)
+		if err != nil {
+			continue
+		}
 		if trimmed := strings.TrimSpace(name); trimmed != "" {
 			return trimmed
 		}
@@ -457,21 +470,21 @@ const broadcastHTMLTemplate = `<!DOCTYPE html>
 
 const broadcastFooterText = `此邮件由 %s 系统发送。<br>This email was sent by %s.`
 
-// wrapBroadcastHTMLShell 给正文 + 主题 + 站点名组合成最终邮件 HTML。
-func wrapBroadcastHTMLShell(subject, siteName, inner string) string {
+// wrapBroadcastHTMLShell 给正文 + 主题 + 发件人名称(brand)组合成最终邮件 HTML。
+func wrapBroadcastHTMLShell(subject, senderName, inner string) string {
 	escapedSubject := html.EscapeString(strings.TrimSpace(subject))
 	if escapedSubject == "" {
 		escapedSubject = "Announcement"
 	}
-	escapedSite := html.EscapeString(strings.TrimSpace(siteName))
-	if escapedSite == "" {
-		escapedSite = "Sub2API"
+	escapedBrand := html.EscapeString(strings.TrimSpace(senderName))
+	if escapedBrand == "" {
+		escapedBrand = "Sub2API"
 	}
 	if strings.TrimSpace(inner) == "" {
 		inner = "<p style=\"margin:0;\"></p>"
 	}
-	footer := fmt.Sprintf(broadcastFooterText, escapedSite, escapedSite)
-	return fmt.Sprintf(broadcastHTMLTemplate, escapedSubject, escapedSite, escapedSubject, inner, footer)
+	footer := fmt.Sprintf(broadcastFooterText, escapedBrand, escapedBrand)
+	return fmt.Sprintf(broadcastHTMLTemplate, escapedSubject, escapedBrand, escapedSubject, inner, footer)
 }
 
 // markRunning 防止同一个 broadcast 被并发触发两次。
